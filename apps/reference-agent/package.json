@@ -1,0 +1,23 @@
+{
+  "name": "reference-agent",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "bench": "tsx src/benchmark.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lynage/core": "workspace:*",
+    "@lynage/storage-sqlite": "workspace:*",
+    "@lynage/ai-sdk": "workspace:*",
+    "ai": "^4.3.0",
+    "@ai-sdk/openai": "^1.3.0",
+    "better-sqlite3": "^11.7.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}
