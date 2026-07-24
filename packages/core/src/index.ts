@@ -80,3 +80,24 @@ export type { ArchiveConfig, ArchiveResult } from "./archive-manager.js";
 export { findNaturalBoundary } from "./boundary-detector.js";
 export { compileContext } from "./context-compiler.js";
 export type { CompileOptions, CompiledContext } from "./context-compiler.js";
+
+// History retrieval
+export { HistoryRetriever } from "./history-retriever.js";
+export type {
+  SearchParams,
+  SearchResult,
+  SearchCandidate,
+  DirectoryTreeNode,
+} from "./history-retriever.js";
+
+// Generational compaction
+export { GenerationCompactor } from "./generation-compactor.js";
+export type { CompactConfig, CompactResult } from "./generation-compactor.js";
+
+// Persistent search
+export { SearchTaskManager } from "./search-task-manager.js";
+export type {
+  StartSearchInput,
+  SearchBatch,
+  SearchAnalysis,
+} from "./search-task-manager.js";

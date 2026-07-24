@@ -9,7 +9,10 @@ import type { LynageConfig, MessageInput } from "./types.js";
 import { DEFAULT_CONFIG } from "./types.js";
 import { TurnManager, type TurnHandle } from "./turn.js";
 import { ArchiveManager } from "./archive-manager.js";
+import { HistoryRetriever, type SearchParams, type SearchResult, type DirectoryTreeNode } from "./history-retriever.js";
+import { SearchTaskManager, type StartSearchInput, type SearchBatch, type SearchAnalysis } from "./search-task-manager.js";
 import type { MemoryAction } from "./schemas.js";
+import type { SearchTask } from "./types.js";
 
 export interface LynageMemoryOptions {
   store: LynageStore;
@@ -22,6 +25,8 @@ export class LynageMemory {
   private _model: LynageModel;
   private _config: LynageConfig;
   private _turnManager: TurnManager;
+  private _historyRetriever: HistoryRetriever;
+  private _searchTaskManager: SearchTaskManager;
 
   constructor(options: LynageMemoryOptions) {
     this._store = options.store;
@@ -33,6 +38,8 @@ export class LynageMemory {
       directoryCapacity: this._config.directoryCapacity,
     });
     this._turnManager = new TurnManager(this._store, archiveManager);
+    this._historyRetriever = new HistoryRetriever(this._store);
+    this._searchTaskManager = new SearchTaskManager(this._store);
   }
 
   /** Access the underlying store (for direct operations) */
@@ -129,15 +136,56 @@ export class LynageMemory {
     }
   }
 
-  // ---- History Search (stub — full implementation in M3) ----
+  // ---- History Search (M3: full implementation) ----
 
-  async search(options: { query: string; sessionId?: string }) {
-    return this._store.searchMessages(options.query, options.sessionId);
+  /** Hybrid search: FTS + directory drill-down */
+  async search(options: SearchParams): Promise<SearchResult> {
+    return this._historyRetriever.search(options);
   }
 
+  /** Open original source messages for a chunk */
   async openSource(contextId: string) {
-    const chunk = await this._store.getChunk(contextId);
-    if (!chunk) return null;
-    return this._store.getMessageRange(chunk.sourceFromId, chunk.sourceToId);
+    return this._historyRetriever.openSource(contextId);
+  }
+
+  /** Get directory tree for a session */
+  async getDirectoryTree(sessionId: string): Promise<DirectoryTreeNode[]> {
+    return this._historyRetriever.getDirectoryTree(sessionId);
+  }
+
+  /** Compile search results into model-readable text */
+  compileRetrievedContext(result: SearchResult): string {
+    return this._historyRetriever.compileRetrievedContext(result);
+  }
+
+  // ---- Persistent Search (M6) ----
+
+  /** Start a persistent fuzzy-search task */
+  async startSearch(input: StartSearchInput): Promise<SearchTask> {
+    return this._searchTaskManager.startSearch(input);
+  }
+
+  /** Continue a search task (next batch) */
+  async continueSearch(taskId: string, batchSize?: number): Promise<SearchBatch> {
+    return this._searchTaskManager.nextBatch(taskId, batchSize);
+  }
+
+  /** Analyze completed search results */
+  async analyzeSearch(taskId: string): Promise<SearchAnalysis> {
+    return this._searchTaskManager.analyzeResults(taskId);
+  }
+
+  /** Get search progress */
+  async getSearchProgress(taskId: string): Promise<string> {
+    return this._searchTaskManager.getProgress(taskId);
+  }
+
+  // ---- Archive Statistics ----
+
+  async getArchiveStats(sessionId: string) {
+    const msgCount = await this._store.getMessageCount(sessionId);
+    const chunks = await this._store.listChunks(sessionId);
+    const dirs = await this._store.getRootDirectories(sessionId);
+    return { sessionId, messageCount: msgCount, chunkCount: chunks.length, directoryCount: dirs.length };
   }
 }

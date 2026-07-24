@@ -16,6 +16,7 @@ import type { LynageStore } from "./store.js";
 import type { LynageModel } from "./model.js";
 import { findNaturalBoundary } from "./boundary-detector.js";
 import { estimateMessagesTokenCount } from "./token-counter.js";
+import { GenerationCompactor } from "./generation-compactor.js";
 
 export interface ArchiveConfig {
   /** Token threshold to trigger archiving */
@@ -38,11 +39,13 @@ export class ArchiveManager {
   private store: LynageStore;
   private model: LynageModel;
   private config: ArchiveConfig;
+  private compactor: GenerationCompactor;
 
   constructor(store: LynageStore, model: LynageModel, config: ArchiveConfig) {
     this.store = store;
     this.model = model;
     this.config = config;
+    this.compactor = new GenerationCompactor(store, model, config.directoryCapacity);
   }
 
   /**
@@ -131,46 +134,8 @@ export class ArchiveManager {
     // 11. Also update the chunk's directoryId
     chunk.directoryId = g0Dir.id;
 
-    // 12. Update directory summary if capacity exceeded
-    if (children.length + 1 >= this.config.directoryCapacity) {
-      const allChildren = await this.store.getDirectoryChildren(g0Dir.id);
-      const childDescriptions: Array<{
-        id: string;
-        type: "chunk" | "directory";
-        summary: string;
-        progress: string;
-        conclusions: string[];
-      }> = [];
-
-      for (const child of allChildren) {
-        if (child.childType === "chunk") {
-          const c = await this.store.getChunk(child.childId);
-          if (c) {
-            childDescriptions.push({
-              id: c.id,
-              type: "chunk",
-              summary: c.summary,
-              progress: c.progress,
-              conclusions: [],
-            });
-          }
-        }
-      }
-
-      const dirSummary = await this.model.summarizeDirectory({
-        directoryId: g0Dir.id,
-        timeRangeStart: g0Dir.timeRangeStart,
-        timeRangeEnd: g0Dir.timeRangeEnd,
-        childDescriptions,
-      });
-
-      await this.store.updateDirectory(g0Dir.id, {
-        overallContent: dirSummary.overallContent,
-        progress: dirSummary.progress,
-        mainConclusions: dirSummary.mainConclusions,
-        importantChanges: dirSummary.importantChanges,
-      });
-    }
+    // 12. Check generational compaction (M5)
+    await this.compactor.checkAndCompact(g0Dir.id);
 
     return {
       archived: true,

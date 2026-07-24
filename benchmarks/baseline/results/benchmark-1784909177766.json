@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-07-24T16:06:17.763Z",
+  "simulationTurns": 60,
+  "testQuestions": 5,
+  "groups": [
+    {
+      "name": "Lynage",
+      "avgPromptTokens": 7294,
+      "avgCompletionTokens": 23,
+      "avgElapsedMs": 0,
+      "totalTokens": 439011,
+      "accuracy": 1,
+      "finalMessageCount": 120
+    },
+    {
+      "name": "Summary",
+      "avgPromptTokens": 528,
+      "avgCompletionTokens": 23,
+      "avgElapsedMs": 0,
+      "totalTokens": 33068,
+      "accuracy": 0.8,
+      "finalMessageCount": 15
+    },
+    {
+      "name": "NoMemory",
+      "avgPromptTokens": 12,
+      "avgCompletionTokens": 23,
+      "avgElapsedMs": 0,
+      "totalTokens": 2107,
+      "accuracy": 0,
+      "finalMessageCount": 2
+    }
+  ],
+  "winner": "Lynage"
+}
