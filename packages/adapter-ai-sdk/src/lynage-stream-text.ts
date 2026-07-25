@@ -91,7 +91,38 @@ function createLynageTools(memory: LynageMemory, threadId: string) {
     },
   });
 
-  return { lynageSearch, lynageOpenSource, lynageListDirectories, lynageContinueSearch };
+  const lynageParallelSearch = tool({
+    description:
+      "Run a parallel search across multiple directory trees for a specific question. " +
+      "Workers concurrently read different directories and return evidence positions. " +
+      "Use for broad, important questions that need thorough historical investigation.",
+    parameters: z.object({
+      question: z.string().describe("The question to investigate across all history"),
+      projectGoal: z.string().optional().describe("Current project context/goal"),
+      knownDecisions: z.array(z.string()).optional().describe("Known decisions to include in the snapshot"),
+      searchGoal: z.string().optional().describe("What specifically to look for in the results"),
+    }),
+    execute: async ({ question, projectGoal, knownDecisions, searchGoal }) => {
+      const snapshot = {
+        snapshotId: `snap-${Date.now()}`,
+        projectGoal: projectGoal ?? "Investigate historical context",
+        currentProgress: "Parallel search in progress",
+        knownDecisions: knownDecisions ?? [],
+        question,
+        searchGoal: searchGoal ?? question,
+      };
+      const result = await memory.parallelSearch(threadId, snapshot);
+      return [
+        result.summary,
+        result.evolutionChain.length > 0
+          ? "\nInformation Evolution Chain:\n" + result.evolutionChain.join("\n")
+          : "",
+        `\nWorkers: ${result.totalWorkers} | Directories: ${result.totalDirectoriesSearched} | Confidence: ${Math.round(result.finalConfidence * 100)}%`,
+      ].join("\n");
+    },
+  });
+
+  return { lynageSearch, lynageOpenSource, lynageListDirectories, lynageContinueSearch, lynageParallelSearch };
 }
 
 /**

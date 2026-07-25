@@ -110,3 +110,12 @@ export type {
   VerificationResult,
   VerifiedCandidate,
 } from "./source-verifier.js";
+
+// Parallel search (M8)
+export { ParallelSearchCoordinator } from "./parallel-search-coordinator.js";
+export type {
+  ProjectSnapshot,
+  WorkerInput,
+  WorkerResult,
+  ParallelSearchResult,
+} from "./parallel-search-coordinator.js";

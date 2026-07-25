@@ -12,6 +12,7 @@ import { ArchiveManager } from "./archive-manager.js";
 import { HistoryRetriever, type SearchParams, type SearchResult, type DirectoryTreeNode, type SearchCandidate } from "./history-retriever.js";
 import { SearchTaskManager, type StartSearchInput, type SearchBatch, type SearchAnalysis } from "./search-task-manager.js";
 import { SourceVerifier, type VerifiedCandidate } from "./source-verifier.js";
+import { ParallelSearchCoordinator, type ProjectSnapshot, type ParallelSearchResult } from "./parallel-search-coordinator.js";
 import type { MemoryAction } from "./schemas.js";
 import type { SearchTask } from "./types.js";
 
@@ -29,6 +30,7 @@ export class LynageMemory {
   private _historyRetriever: HistoryRetriever;
   private _searchTaskManager: SearchTaskManager;
   private _sourceVerifier: SourceVerifier;
+  private _parallelSearch: ParallelSearchCoordinator;
 
   constructor(options: LynageMemoryOptions) {
     this._store = options.store;
@@ -43,6 +45,7 @@ export class LynageMemory {
     this._historyRetriever = new HistoryRetriever(this._store);
     this._searchTaskManager = new SearchTaskManager(this._store);
     this._sourceVerifier = new SourceVerifier(this._store);
+    this._parallelSearch = new ParallelSearchCoordinator(this._store, this._historyRetriever);
   }
 
   /** Access the underlying store (for direct operations) */
@@ -203,6 +206,14 @@ export class LynageMemory {
   /** Deep verify with context expansion and evolution chain */
   async deepVerifySearch(candidates: SearchCandidate[], query: string) {
     return this._sourceVerifier.deepVerify(candidates, query);
+  }
+
+  /** Shared-context parallel search across directory trees (M8) */
+  async parallelSearch(
+    sessionId: string,
+    snapshot: ProjectSnapshot,
+  ): Promise<ParallelSearchResult> {
+    return this._parallelSearch.search(sessionId, snapshot);
   }
 
   /** Open original source messages for a chunk */

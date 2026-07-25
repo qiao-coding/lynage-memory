@@ -267,6 +267,10 @@ pnpm -r build        # 构建
 | M5 | 代际目录树 (G0→G1→G2 压缩) | ✅ |
 | M6 | 持久化模糊搜索 (游标 + 分批) | ✅ |
 | M7 | 生态 Adapter (MCP Server 5 tools) | ✅ |
+| P0 | User Memory 独立存储 | ✅ |
+| P1a | Source Verifier | ✅ |
+| P1b | Context Compiler 6 视图 | ✅ |
+| P2/M8 | Shared-Context Parallel Memory | ✅ |
 
 ---
 
