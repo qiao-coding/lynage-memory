@@ -11,6 +11,7 @@ import type {
   CreateChunkInput,
   CreateDirectoryInput,
   WorkingMemoryInput,
+  UserMemoryInput,
   SearchTaskInput,
 } from "@lynage/core";
 import type {
@@ -19,6 +20,7 @@ import type {
   DirectoryNode,
   DirectoryChild,
   WorkingMemory,
+  UserMemory,
   SearchTask,
   Scope,
   MessageInput,
@@ -340,6 +342,49 @@ export class SqliteStore implements LynageStore {
   }
 
   // -----------------------------------------------------------------------
+  // User Memory (cross-task stable preferences)
+  // -----------------------------------------------------------------------
+
+  async getUserMemory(userId: string): Promise<UserMemory | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.userMemory)
+      .where(eq(schema.userMemory.userId, userId))
+      .limit(1);
+    return rows[0] ? this.toUserMemory(rows[0]) : null;
+  }
+
+  async upsertUserMemory(input: UserMemoryInput): Promise<UserMemory> {
+    const existing = await this.getUserMemory(input.userId);
+    const now = Date.now();
+
+    if (existing) {
+      await this.db
+        .update(schema.userMemory)
+        .set({
+          preferences: input.preferences ?? existing.preferences,
+          longTermGoals: input.longTermGoals ?? existing.longTermGoals,
+          constraints: input.constraints ?? existing.constraints,
+          background: input.background ?? existing.background,
+          updatedAt: now,
+        })
+        .where(eq(schema.userMemory.userId, input.userId));
+    } else {
+      await this.db.insert(schema.userMemory).values({
+        id: randomUUID(),
+        userId: input.userId,
+        preferences: input.preferences ?? [],
+        longTermGoals: input.longTermGoals ?? [],
+        constraints: input.constraints ?? [],
+        background: input.background ?? null,
+        updatedAt: now,
+      });
+    }
+
+    return (await this.getUserMemory(input.userId))!;
+  }
+
+  // -----------------------------------------------------------------------
   // Search Tasks
   // -----------------------------------------------------------------------
 
@@ -494,6 +539,20 @@ export class SqliteStore implements LynageStore {
       progress: r.progress as string[],
       unresolved: r.unresolved as string[],
       recentChanges: r.recentChanges as string[],
+      updatedAt: r.updatedAt,
+    };
+  }
+
+  private toUserMemory(
+    r: typeof schema.userMemory.$inferSelect,
+  ): UserMemory {
+    return {
+      id: r.id,
+      userId: r.userId,
+      preferences: r.preferences as string[],
+      longTermGoals: r.longTermGoals as string[],
+      constraints: r.constraints as string[],
+      background: r.background ?? undefined,
       updatedAt: r.updatedAt,
     };
   }

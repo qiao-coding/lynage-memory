@@ -9,6 +9,7 @@ export type {
   DirectoryNode,
   DirectoryChild,
   WorkingMemory,
+  UserMemory,
   SearchTask,
   SearchStatus,
   Scope,
@@ -25,6 +26,7 @@ export type {
   CreateChunkInput,
   CreateDirectoryInput,
   WorkingMemoryInput,
+  UserMemoryInput,
   SearchTaskInput,
 } from "./store.js";
 
@@ -79,7 +81,7 @@ export { ArchiveManager } from "./archive-manager.js";
 export type { ArchiveConfig, ArchiveResult } from "./archive-manager.js";
 export { findNaturalBoundary } from "./boundary-detector.js";
 export { compileContext } from "./context-compiler.js";
-export type { CompileOptions, CompiledContext } from "./context-compiler.js";
+export type { CompileOptions, CompiledContext, CompileView } from "./context-compiler.js";
 
 // History retrieval
 export { HistoryRetriever } from "./history-retriever.js";
@@ -101,3 +103,10 @@ export type {
   SearchBatch,
   SearchAnalysis,
 } from "./search-task-manager.js";
+
+// Source verification
+export { SourceVerifier } from "./source-verifier.js";
+export type {
+  VerificationResult,
+  VerifiedCandidate,
+} from "./source-verifier.js";

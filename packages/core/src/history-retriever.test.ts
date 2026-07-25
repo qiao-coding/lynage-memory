@@ -54,6 +54,8 @@ class MockStoreForSearch implements LynageStore {
   }
   async getWorkingMemory() { return null; }
   async upsertWorkingMemory() { return {} as WorkingMemory; }
+  async getUserMemory() { return null; }
+  async upsertUserMemory() { return {} as never; }
   async createSearchTask() { return {} as never; }
   async updateSearchTask() { return {} as never; }
   async getSearchTask() { return null; }

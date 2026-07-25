@@ -86,6 +86,17 @@ export interface WorkingMemory {
   updatedAt: number;
 }
 
+/** User memory — cross-task stable preferences and background */
+export interface UserMemory {
+  id: string;
+  userId: string;
+  preferences: string[];
+  longTermGoals: string[];
+  constraints: string[];
+  background?: string;
+  updatedAt: number;
+}
+
 /** Persistent fuzzy-search task */
 export type SearchStatus = "pending" | "in_progress" | "completed" | "not_found";
 

@@ -3,14 +3,15 @@
 // Composes Store + Model + TurnManager into a coherent memory system.
 // ---------------------------------------------------------------------------
 
-import type { LynageStore, WorkingMemoryInput } from "./store.js";
+import type { LynageStore, WorkingMemoryInput, UserMemoryInput } from "./store.js";
 import type { LynageModel } from "./model.js";
 import type { LynageConfig, MessageInput } from "./types.js";
 import { DEFAULT_CONFIG } from "./types.js";
 import { TurnManager, type TurnHandle } from "./turn.js";
 import { ArchiveManager } from "./archive-manager.js";
-import { HistoryRetriever, type SearchParams, type SearchResult, type DirectoryTreeNode } from "./history-retriever.js";
+import { HistoryRetriever, type SearchParams, type SearchResult, type DirectoryTreeNode, type SearchCandidate } from "./history-retriever.js";
 import { SearchTaskManager, type StartSearchInput, type SearchBatch, type SearchAnalysis } from "./search-task-manager.js";
+import { SourceVerifier, type VerifiedCandidate } from "./source-verifier.js";
 import type { MemoryAction } from "./schemas.js";
 import type { SearchTask } from "./types.js";
 
@@ -27,6 +28,7 @@ export class LynageMemory {
   private _turnManager: TurnManager;
   private _historyRetriever: HistoryRetriever;
   private _searchTaskManager: SearchTaskManager;
+  private _sourceVerifier: SourceVerifier;
 
   constructor(options: LynageMemoryOptions) {
     this._store = options.store;
@@ -40,6 +42,7 @@ export class LynageMemory {
     this._turnManager = new TurnManager(this._store, archiveManager);
     this._historyRetriever = new HistoryRetriever(this._store);
     this._searchTaskManager = new SearchTaskManager(this._store);
+    this._sourceVerifier = new SourceVerifier(this._store);
   }
 
   /** Access the underlying store (for direct operations) */
@@ -81,6 +84,16 @@ export class LynageMemory {
 
   async upsertWorkingMemory(input: WorkingMemoryInput) {
     return this._store.upsertWorkingMemory(input);
+  }
+
+  // ---- User Memory (cross-task stable preferences) ----
+
+  async getUserMemory(userId: string) {
+    return this._store.getUserMemory(userId);
+  }
+
+  async upsertUserMemory(input: UserMemoryInput) {
+    return this._store.upsertUserMemory(input);
   }
 
   // ---- Memory Write-Back ----
@@ -132,6 +145,42 @@ export class LynageMemory {
           unresolved: current.unresolved,
           recentChanges: current.recentChanges,
         });
+      } else if (action.target === "userMemory") {
+        const userId = sessionId; // In many cases userId === sessionId
+        const um = await this._store.getUserMemory(userId);
+        const current = um ?? {
+          id: "",
+          userId,
+          preferences: [] as string[],
+          longTermGoals: [] as string[],
+          constraints: [] as string[],
+          updatedAt: 0,
+        };
+
+        if (action.operation === "append") {
+          const section = action.section as keyof typeof current;
+          const val = current[section];
+          if (Array.isArray(val)) {
+            val.push(action.value);
+          } else if (typeof val === "string" || val === undefined) {
+            (current as unknown as Record<string, unknown>)[section] = action.value;
+          }
+        } else if (action.operation === "remove") {
+          const section = action.section as keyof typeof current;
+          const val = current[section];
+          if (Array.isArray(val)) {
+            (current as unknown as Record<string, unknown>)[section] =
+              val.filter((v) => v !== action.value);
+          }
+        }
+
+        await this._store.upsertUserMemory({
+          userId,
+          preferences: current.preferences,
+          longTermGoals: current.longTermGoals,
+          constraints: current.constraints,
+          background: current.background,
+        });
       }
     }
   }
@@ -141,6 +190,19 @@ export class LynageMemory {
   /** Hybrid search: FTS + directory drill-down */
   async search(options: SearchParams): Promise<SearchResult> {
     return this._historyRetriever.search(options);
+  }
+
+  /** Verify search results against original messages */
+  async verifySearch(
+    candidates: SearchCandidate[],
+    query: string,
+  ): Promise<VerifiedCandidate[]> {
+    return this._sourceVerifier.verifyBatch(candidates, query);
+  }
+
+  /** Deep verify with context expansion and evolution chain */
+  async deepVerifySearch(candidates: SearchCandidate[], query: string) {
+    return this._sourceVerifier.deepVerify(candidates, query);
   }
 
   /** Open original source messages for a chunk */

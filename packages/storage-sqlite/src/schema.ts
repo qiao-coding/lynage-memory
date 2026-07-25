@@ -85,6 +85,16 @@ export const workingMemory = sqliteTable("working_memory", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+export const userMemory = sqliteTable("user_memory", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().unique(),
+  preferences: text("preferences", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  longTermGoals: text("long_term_goals", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  constraints: text("constraints", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  background: text("background"),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 // ---------------------------------------------------------------------------
 // search_tasks — persistent fuzzy search state
 // ---------------------------------------------------------------------------

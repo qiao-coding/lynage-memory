@@ -29,7 +29,13 @@ function createLynageTools(memory: LynageMemory, threadId: string) {
     }),
     execute: async ({ query }) => {
       const result = await memory.search({ query, sessionId: threadId });
-      // Return compiled context so the Agent can understand the results
+      // Verify candidates against original messages before returning
+      if (result.candidates.length > 0) {
+        const verified = await memory.verifySearch(result.candidates, query);
+        // Only return verified results
+        const verifiedResult = { ...result, candidates: verified };
+        return memory.compileRetrievedContext(verifiedResult);
+      }
       return memory.compileRetrievedContext(result);
     },
   });

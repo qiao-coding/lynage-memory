@@ -10,6 +10,7 @@ import type {
   DirectoryNode,
   DirectoryChild,
   WorkingMemory,
+  UserMemory,
   SearchTask,
   SourceRange,
 } from "./types.js";
@@ -47,6 +48,14 @@ export interface WorkingMemoryInput {
   progress?: string[];
   unresolved?: string[];
   recentChanges?: string[];
+}
+
+export interface UserMemoryInput {
+  userId: string;
+  preferences?: string[];
+  longTermGoals?: string[];
+  constraints?: string[];
+  background?: string;
 }
 
 export interface SearchTaskInput {
@@ -88,6 +97,10 @@ export interface LynageStore {
   // working memory
   getWorkingMemory(sessionId: string): Promise<WorkingMemory | null>;
   upsertWorkingMemory(input: WorkingMemoryInput): Promise<WorkingMemory>;
+
+  // user memory (cross-task stable preferences)
+  getUserMemory(userId: string): Promise<UserMemory | null>;
+  upsertUserMemory(input: UserMemoryInput): Promise<UserMemory>;
 
   // search tasks
   createSearchTask(input: SearchTaskInput): Promise<SearchTask>;

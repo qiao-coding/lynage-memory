@@ -57,7 +57,9 @@ describe("compileContext", () => {
       createdAt: Date.now(),
     };
 
+    // Use project-work view to include directory summaries
     const result = compileContext({
+      view: "project-work",
       recentMessages: [makeMsg("user", "Continue please")],
       directories: [dir],
     });

@@ -43,6 +43,8 @@ class MockStore implements LynageStore {
   async getWorkingMemory(sessionId: string): Promise<WorkingMemory | null> {
     return this.wm.get(sessionId) ?? null;
   }
+  async getUserMemory() { return null; }
+  async upsertUserMemory() { return {} as never; }
 
   // ---- Unused stubs ----
   async getMessage() { return null; }

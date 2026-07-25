@@ -101,6 +101,38 @@ export function createLynageMcpTools(memory: LynageMemory) {
       },
     },
 
+    lynage_memory_read_user: {
+      description:
+        "Read the stable user memory (cross-task preferences, long-term goals, constraints, background).",
+      inputSchema: {
+        userId: z.string().describe("User ID"),
+      },
+      handler: async (args: { userId: string }) => {
+        const um = await memory.getUserMemory(args.userId);
+        if (!um) return { content: [{ type: "text", text: "No user memory found for this user." }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: [
+                `# User Memory (${args.userId})`,
+                um.preferences.length > 0
+                  ? `\n## Preferences\n${um.preferences.map((p) => `- ${p}`).join("\n")}`
+                  : "",
+                um.longTermGoals.length > 0
+                  ? `\n## Long-term Goals\n${um.longTermGoals.map((g) => `- ${g}`).join("\n")}`
+                  : "",
+                um.constraints.length > 0
+                  ? `\n## Constraints\n${um.constraints.map((c) => `- ${c}`).join("\n")}`
+                  : "",
+                um.background ? `\n## Background\n${um.background}` : "",
+              ].join("\n"),
+            },
+          ],
+        };
+      },
+    },
+
     lynage_memory_stats: {
       description: "Get archive statistics for a session.",
       inputSchema: {
