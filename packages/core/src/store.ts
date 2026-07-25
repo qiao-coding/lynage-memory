@@ -71,6 +71,7 @@ export interface LynageStore {
   getChunk(id: string): Promise<ContextChunk | null>;
   getChunksByDirectory(directoryId: string): Promise<ContextChunk[]>;
   listChunks(sessionId: string): Promise<ContextChunk[]>;
+  updateChunkDirectory(chunkId: string, directoryId: string): Promise<void>;
 
   // directories
   createDirectory(input: CreateDirectoryInput): Promise<DirectoryNode>;

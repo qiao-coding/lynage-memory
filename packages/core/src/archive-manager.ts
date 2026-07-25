@@ -131,8 +131,8 @@ export class ArchiveManager {
       sortOrder: children.length,
     });
 
-    // 11. Also update the chunk's directoryId
-    chunk.directoryId = g0Dir.id;
+    // 11. Persist the chunk's directory association
+    await this.store.updateChunkDirectory(chunk.id, g0Dir.id);
 
     // 12. Check generational compaction (M5)
     await this.compactor.checkAndCompact(g0Dir.id);
@@ -174,7 +174,9 @@ function generateId(): string {
 function findRetainIndex(messages: Message[], retainTokens: number): number {
   let tokens = 0;
   for (let i = messages.length - 1; i >= 0; i--) {
-    tokens += messages[i]!.tokenCount ?? 0;
+    const msg = messages[i]!;
+    // Use recorded tokenCount if available, otherwise estimate from content length
+    tokens += msg.tokenCount ?? Math.ceil(msg.content.length / 4);
     if (tokens >= retainTokens) {
       return i;
     }

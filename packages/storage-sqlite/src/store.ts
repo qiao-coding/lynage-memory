@@ -217,17 +217,32 @@ export class SqliteStore implements LynageStore {
     updates: Partial<CreateDirectoryInput>,
   ): Promise<DirectoryNode> {
     const setData: Record<string, unknown> = {};
-    if (updates.overallContent !== undefined) setData.overallContent = updates.overallContent;
+    if (updates.sessionId !== undefined) setData.sessionId = updates.sessionId;
+    if (updates.parentId !== undefined) setData.parent_id = updates.parentId;
+    if (updates.generation !== undefined) setData.generation = updates.generation;
+    if (updates.timeRangeStart !== undefined) setData.time_range_start = updates.timeRangeStart;
+    if (updates.timeRangeEnd !== undefined) setData.time_range_end = updates.timeRangeEnd;
+    if (updates.overallContent !== undefined) setData.overall_content = updates.overallContent;
     if (updates.progress !== undefined) setData.progress = updates.progress;
-    if (updates.mainConclusions !== undefined) setData.mainConclusions = updates.mainConclusions;
-    if (updates.importantChanges !== undefined) setData.importantChanges = updates.importantChanges;
+    if (updates.mainConclusions !== undefined) setData.main_conclusions = updates.mainConclusions;
+    if (updates.importantChanges !== undefined) setData.important_changes = updates.importantChanges;
 
-    await this.db
-      .update(schema.directories)
-      .set(setData)
-      .where(eq(schema.directories.id, id));
+    if (Object.keys(setData).length > 0) {
+      await this.db
+        .update(schema.directories)
+        .set(setData)
+        .where(eq(schema.directories.id, id));
+    }
 
     return (await this.getDirectory(id))!;
+  }
+
+  /** Update a chunk's directory association (persisted to DB) */
+  async updateChunkDirectory(chunkId: string, directoryId: string): Promise<void> {
+    await this.db
+      .update(schema.contextChunks)
+      .set({ directoryId })
+      .where(eq(schema.contextChunks.id, chunkId));
   }
 
   async getRootDirectories(sessionId: string): Promise<DirectoryNode[]> {

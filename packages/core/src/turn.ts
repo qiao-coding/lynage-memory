@@ -153,7 +153,8 @@ export class TurnManager {
       }
     }
 
-    // Save tool results
+    // Save tool results (NO toolName — results are identified by toolCallId only,
+    // so boundary-detector can distinguish calls from results)
     if (input.toolResults) {
       for (const tr of input.toolResults) {
         const content =
@@ -163,7 +164,6 @@ export class TurnManager {
           role: "tool",
           content,
           toolCallId: tr.toolCallId,
-          toolName: tr.toolName,
         });
         toolMessages.push(msg);
       }

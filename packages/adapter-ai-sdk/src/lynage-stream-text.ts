@@ -115,41 +115,52 @@ export async function lynageStreamText(options: LynageStreamTextOptions) {
   }> = [];
   let responseText = "";
 
-  // 2. Stream the model response
-  const result = streamText({
-    model,
-    prompt,
-    tools: allTools as Record<string, CoreTool>,
-    system,
-    onFinish: (event) => {
-      responseText = event.text ?? "";
-      for (const step of event.steps ?? []) {
-        const s = step as {
-          toolCalls?: Array<{ toolCallId: string; toolName: string; args: unknown }>;
-          toolResults?: Array<{ toolCallId: string; toolName: string; result: unknown }>;
-        };
-        for (const tc of s.toolCalls ?? []) {
-          collectedCalls.push(tc);
+  // 2. Stream the model response (with error handling to prevent orphaned turns)
+  let result;
+  try {
+    result = streamText({
+      model,
+      prompt,
+      tools: allTools as Record<string, CoreTool>,
+      system,
+      onFinish: (event) => {
+        responseText = event.text ?? "";
+        for (const step of event.steps ?? []) {
+          const s = step as {
+            toolCalls?: Array<{ toolCallId: string; toolName: string; args: unknown }>;
+            toolResults?: Array<{ toolCallId: string; toolName: string; result: unknown }>;
+          };
+          for (const tc of s.toolCalls ?? []) {
+            collectedCalls.push(tc);
+          }
+          for (const tr of s.toolResults ?? []) {
+            collectedResults.push(tr);
+          }
         }
-        for (const tr of s.toolResults ?? []) {
-          collectedResults.push(tr);
-        }
-      }
-    },
-  });
+      },
+    });
 
-  // 3. Wait for stream completion
-  const final = await result;
-  const finalText = await final.text;
+    // 3. Wait for stream completion
+    const final = await result;
+    const finalText = await final.text;
 
-  // 4. Finish turn
-  await turn.finish({
-    response: responseText || finalText || "(no text response)",
-    toolCalls: collectedCalls.length > 0 ? collectedCalls : undefined,
-    toolResults: collectedResults.length > 0 ? collectedResults : undefined,
-  });
+    // 4. Finish turn
+    await turn.finish({
+      response: responseText || finalText || "(no text response)",
+      toolCalls: collectedCalls.length > 0 ? collectedCalls : undefined,
+      toolResults: collectedResults.length > 0 ? collectedResults : undefined,
+    });
+  } catch (err) {
+    // Ensure turn is always finished — even on model failure.
+    // This prevents orphaned user messages in the store.
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    await turn.finish({
+      response: `[Error: ${errorMessage}]`,
+    });
+    throw err;
+  }
 
-  return result;
+  return result!;
 }
 
 // ---- Helpers ----

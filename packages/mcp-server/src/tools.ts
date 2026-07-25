@@ -86,14 +86,17 @@ export function createLynageMcpTools(memory: LynageMemory) {
         operation: "append" | "remove";
         sessionId?: string;
       }) => {
-        await memory.commit([
-          {
-            target: "workingMemory",
-            operation: args.operation,
-            section: args.section,
-            value: args.value,
-          },
-        ]);
+        await memory.commit(
+          [
+            {
+              target: "workingMemory",
+              operation: args.operation,
+              section: args.section,
+              value: args.value,
+            },
+          ],
+          args.sessionId ?? "default",
+        );
         return { content: [{ type: "text", text: `Memory updated: ${args.operation} "${args.value}" to ${args.section}` }] };
       },
     },

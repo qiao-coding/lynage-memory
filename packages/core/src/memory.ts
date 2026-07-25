@@ -89,17 +89,17 @@ export class LynageMemory {
    * Commit memory actions proposed by the model.
    * Validates each action before applying.
    */
-  async commit(actions: MemoryAction[]): Promise<void> {
+  async commit(actions: MemoryAction[], sessionId = "default"): Promise<void> {
     for (const action of actions) {
       if (!action.target || !action.operation || !action.section || !action.value) {
         continue;
       }
 
       if (action.target === "workingMemory") {
-        const wm = await this._store.getWorkingMemory("default");
+        const wm = await this._store.getWorkingMemory(sessionId);
         const current = wm ?? {
           id: "",
-          sessionId: "default",
+          sessionId,
           confirmed: [] as string[],
           progress: [] as string[],
           unresolved: [] as string[],
@@ -125,7 +125,7 @@ export class LynageMemory {
         }
 
         await this._store.upsertWorkingMemory({
-          sessionId: "default",
+          sessionId,
           currentTask: current.currentTask,
           confirmed: current.confirmed,
           progress: current.progress,
