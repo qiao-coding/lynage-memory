@@ -1,0 +1,830 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/jicw55",
+    "id": "jicw55",
+    "slide": 4,
+    "layoutId": "26eb28f6-c494-4866-ba76-dbe6e03d1d3e",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "7aa41714-46a1-4cb5-a365-e999003a16c3",
+    "masterLayoutName": "Master",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Microsoft YaHei"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "26eb28f6-c494-4866-ba76-dbe6e03d1d3e",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "7aa41714-46a1-4cb5-a365-e999003a16c3",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "7aa41714-46a1-4cb5-a365-e999003a16c3",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5cvit0je",
+      "id": "1",
+      "bbox": [
+        41,
+        36,
+        1040,
+        86
+      ],
+      "geometry": "rect",
+      "text": "Lynage 是记忆层，不是完整 Agent 框架",
+      "textPreview": "Lynage 是记忆层，不是完整 Agent 框架",
+      "resolvedFontSize": 48,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 48,
+        "typeface": "Microsoft YaHei",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Lynage 是记忆层，不是完整 Agent 框架"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Lynage 是记忆层，不是完整 Agent 框架",
+          "resolvedTextStyle": {
+            "fontSize": 48,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Lynage 是记忆层，不是完整 Agent 框架",
+              "fontSize": 48,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/i94jilkn",
+      "id": "2",
+      "bbox": [
+        1184,
+        659,
+        55,
+        25
+      ],
+      "geometry": "rect",
+      "text": "04",
+      "textPreview": "04",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 18,
+        "typeface": "Microsoft YaHei",
+        "color": "#000000",
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "04"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "04",
+          "resolvedTextStyle": {
+            "fontSize": 18,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "04",
+              "fontSize": 18,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "alignment": "right"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/3ad0rq18",
+      "id": "3",
+      "bbox": [
+        41,
+        124,
+        1160,
+        72
+      ],
+      "geometry": "rect",
+      "text": "它嵌入现有 Agent Framework，接管上下文谱系、历史归档、检索与原文恢复；模型调用、工具执行和工作流仍由上层框架负责。",
+      "textPreview": "它嵌入现有 Agent Framework，接管上下文谱系、历史归档、检索与原文恢复；模型调用、工具执行和工作流仍由上层框架负责。",
+      "resolvedFontSize": 25,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 25,
+        "typeface": "Microsoft YaHei",
+        "color": "#5B616E",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "它嵌入现有 Agent"
+          },
+          {
+            "index": 2,
+            "text": "Framework，接管上下文谱系、历史归档、检索与原文恢复；模型调用、工具执行和工作流仍由上层框"
+          },
+          {
+            "index": 3,
+            "text": "架负责。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "它嵌入现有 Agent Framework，接管上下文谱系、历史归档、检索与原文恢复；模型调用、工具执行和工作流仍由上层框架负责。",
+          "resolvedTextStyle": {
+            "fontSize": 25,
+            "typeface": "Microsoft YaHei",
+            "color": "#5B616E",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "它嵌入现有 Agent Framework，接管上下文谱系、历史归档、检索与原文恢复；模型调用、工具执行和工作流仍由上层框架负责。",
+              "fontSize": 25,
+              "typeface": "Microsoft YaHei",
+              "color": "#5B616E",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gnmhgb2x",
+      "id": "4",
+      "bbox": [
+        67,
+        275,
+        395,
+        244
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#EAF5FB",
+      "lineColor": "#EAF5FB",
+      "lineWidth": 1
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/h8vipgj2",
+      "id": "5",
+      "bbox": [
+        95,
+        304,
+        250,
+        38
+      ],
+      "geometry": "rect",
+      "text": "Lynage 负责",
+      "textPreview": "Lynage 负责",
+      "resolvedFontSize": 30,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 30,
+        "typeface": "Microsoft YaHei",
+        "color": "#3D8DFF",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Lynage 负责"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Lynage 负责",
+          "resolvedTextStyle": {
+            "fontSize": 30,
+            "typeface": "Microsoft YaHei",
+            "color": "#3D8DFF",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Lynage 负责",
+              "fontSize": 30,
+              "typeface": "Microsoft YaHei",
+              "color": "#3D8DFF",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ulkzelkr",
+      "id": "6",
+      "bbox": [
+        95,
+        365,
+        315,
+        124
+      ],
+      "geometry": "rect",
+      "text": "消息保存\n上下文维护\n历史归档与目录索引\n历史检索、原文恢复\nPrompt 上下文编译",
+      "textPreview": "消息保存 | 上下文维护 | 历史归档与目录索引 | 历史检索、原文恢复 | Prompt 上下文编译",
+      "resolvedFontSize": 23,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 23,
+        "typeface": "Microsoft YaHei",
+        "color": "#000000",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 5,
+        "lines": [
+          {
+            "index": 1,
+            "text": "消息保存"
+          },
+          {
+            "index": 2,
+            "text": "上下文维护"
+          },
+          {
+            "index": 3,
+            "text": "历史归档与目录索引"
+          },
+          {
+            "index": 4,
+            "text": "历史检索、原文恢复"
+          },
+          {
+            "index": 5,
+            "text": "Prompt 上下文编译"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "消息保存",
+          "resolvedTextStyle": {
+            "fontSize": 23,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "消息保存",
+              "fontSize": 23,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "上下文维护",
+          "resolvedTextStyle": {
+            "fontSize": 23,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "上下文维护",
+              "fontSize": 23,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 3,
+          "text": "历史归档与目录索引",
+          "resolvedTextStyle": {
+            "fontSize": 23,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "历史归档与目录索引",
+              "fontSize": 23,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 4,
+          "text": "历史检索、原文恢复",
+          "resolvedTextStyle": {
+            "fontSize": 23,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "历史检索、原文恢复",
+              "fontSize": 23,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 5,
+          "text": "Prompt 上下文编译",
+          "resolvedTextStyle": {
+            "fontSize": 23,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Prompt 上下文编译",
+              "fontSize": 23,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vmt0nq1c",
+      "id": "7",
+      "bbox": [
+        550,
+        275,
+        395,
+        244
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#F2F2F2",
+      "lineColor": "#B8BCC4",
+      "lineWidth": 1
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/8j2hcb2l",
+      "id": "8",
+      "bbox": [
+        578,
+        304,
+        250,
+        38
+      ],
+      "geometry": "rect",
+      "text": "不负责",
+      "textPreview": "不负责",
+      "resolvedFontSize": 30,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 30,
+        "typeface": "Microsoft YaHei",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "不负责"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "不负责",
+          "resolvedTextStyle": {
+            "fontSize": 30,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "不负责",
+              "fontSize": 30,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/tkbilgj6",
+      "id": "9",
+      "bbox": [
+        578,
+        365,
+        315,
+        124
+      ],
+      "geometry": "rect",
+      "text": "模型 Provider\nAgent 调度\nWorkflow 编排\nTool 执行\n聊天 UI 与认证系统",
+      "textPreview": "模型 Provider | Agent 调度 | Workflow 编排 | Tool 执行 | 聊天 UI 与认证系统",
+      "resolvedFontSize": 23,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 23,
+        "typeface": "Microsoft YaHei",
+        "color": "#000000",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 5,
+        "lines": [
+          {
+            "index": 1,
+            "text": "模型 Provider"
+          },
+          {
+            "index": 2,
+            "text": "Agent 调度"
+          },
+          {
+            "index": 3,
+            "text": "Workflow 编排"
+          },
+          {
+            "index": 4,
+            "text": "Tool 执行"
+          },
+          {
+            "index": 5,
+            "text": "聊天 UI 与认证系统"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "模型 Provider",
+          "resolvedTextStyle": {
+            "fontSize": 23,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "模型 Provider",
+              "fontSize": 23,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "Agent 调度",
+          "resolvedTextStyle": {
+            "fontSize": 23,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Agent 调度",
+              "fontSize": 23,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 3,
+          "text": "Workflow 编排",
+          "resolvedTextStyle": {
+            "fontSize": 23,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Workflow 编排",
+              "fontSize": 23,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 4,
+          "text": "Tool 执行",
+          "resolvedTextStyle": {
+            "fontSize": 23,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Tool 执行",
+              "fontSize": 23,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 5,
+          "text": "聊天 UI 与认证系统",
+          "resolvedTextStyle": {
+            "fontSize": 23,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "聊天 UI 与认证系统",
+              "fontSize": 23,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1g36pofq",
+      "id": "10",
+      "bbox": [
+        68,
+        590,
+        1010,
+        36
+      ],
+      "geometry": "rect",
+      "text": "边界清晰，才方便接入 Vercel AI SDK、MCP 或未来其他 Agent 框架。",
+      "textPreview": "边界清晰，才方便接入 Vercel AI SDK、MCP 或未来其他 Agent 框架。",
+      "resolvedFontSize": 25,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 25,
+        "typeface": "Microsoft YaHei",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "边界清晰，才方便接入 Vercel AI SDK、MCP 或未来其他 Agent 框架。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "边界清晰，才方便接入 Vercel AI SDK、MCP 或未来其他 Agent 框架。",
+          "resolvedTextStyle": {
+            "fontSize": 25,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "边界清晰，才方便接入 Vercel AI SDK、MCP 或未来其他 Agent 框架。",
+              "fontSize": 25,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

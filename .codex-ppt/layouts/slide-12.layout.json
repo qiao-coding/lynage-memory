@@ -1,0 +1,290 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/2n8jch",
+    "id": "2n8jch",
+    "slide": 12,
+    "layoutId": "26eb28f6-c494-4866-ba76-dbe6e03d1d3e",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "7aa41714-46a1-4cb5-a365-e999003a16c3",
+    "masterLayoutName": "Master",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Microsoft YaHei"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "26eb28f6-c494-4866-ba76-dbe6e03d1d3e",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "7aa41714-46a1-4cb5-a365-e999003a16c3",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "7aa41714-46a1-4cb5-a365-e999003a16c3",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/tkby9ojm",
+      "id": "1",
+      "bbox": [
+        41,
+        43,
+        180,
+        58
+      ],
+      "geometry": "rect",
+      "text": "结论",
+      "textPreview": "结论",
+      "resolvedFontSize": 32,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 32,
+        "typeface": "Microsoft YaHei",
+        "color": "#000000",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "结论"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "结论",
+          "resolvedTextStyle": {
+            "fontSize": 32,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "结论",
+              "fontSize": 32,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6xkzyt0b",
+      "id": "2",
+      "bbox": [
+        41,
+        188,
+        1030,
+        220
+      ],
+      "geometry": "rect",
+      "text": "Lynage 让有限上下文模型\n持续访问并验证任意规模的历史",
+      "textPreview": "Lynage 让有限上下文模型 | 持续访问并验证任意规模的历史",
+      "resolvedFontSize": 70,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 70,
+        "typeface": "Microsoft YaHei",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Lynage 让有限上下文模型"
+          },
+          {
+            "index": 2,
+            "text": "持续访问并验证任意规模的历史"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Lynage 让有限上下文模型",
+          "resolvedTextStyle": {
+            "fontSize": 70,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Lynage 让有限上下文模型",
+              "fontSize": 70,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "持续访问并验证任意规模的历史",
+          "resolvedTextStyle": {
+            "fontSize": 70,
+            "typeface": "Microsoft YaHei",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "持续访问并验证任意规模的历史",
+              "fontSize": 70,
+              "typeface": "Microsoft YaHei",
+              "color": "#000000",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7ytg7y1g",
+      "id": "3",
+      "bbox": [
+        41,
+        526,
+        1130,
+        82
+      ],
+      "geometry": "rect",
+      "text": "它不把摘要当记忆，而把摘要降级为导航；真正的事实始终留在可恢复、可验证、可追溯的原文中。",
+      "textPreview": "它不把摘要当记忆，而把摘要降级为导航；真正的事实始终留在可恢复、可验证、可追溯的原文中。",
+      "resolvedFontSize": 28,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 28,
+        "typeface": "Microsoft YaHei",
+        "color": "#5B616E",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "它不把摘要当记忆，而把摘要降级为导航；真正的事实始终留在可恢复、可验证、可追溯"
+          },
+          {
+            "index": 2,
+            "text": "的原文中。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "它不把摘要当记忆，而把摘要降级为导航；真正的事实始终留在可恢复、可验证、可追溯的原文中。",
+          "resolvedTextStyle": {
+            "fontSize": 28,
+            "typeface": "Microsoft YaHei",
+            "color": "#5B616E",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "它不把摘要当记忆，而把摘要降级为导航；真正的事实始终留在可恢复、可验证、可追溯的原文中。",
+              "fontSize": 28,
+              "typeface": "Microsoft YaHei",
+              "color": "#5B616E",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}
