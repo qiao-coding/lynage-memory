@@ -20,8 +20,10 @@
 
 | English | 中文 | 一句话 |
 |---------|------|--------|
-| Context Window | 上下文窗口 | 用户看到的一段连续对话（"第 1~42 轮: 技术选型"） |
-| Context Chunk | 上下文块 / 冻结窗口 | 超出阈值后被冻结的上下文窗口，本质=Context Chunk |
+| Workspace Context | 工作区上下文（父类） | 一个项目/任务，包含若干子类上下文 |
+| Sub-context | 子类上下文 | 工作区下的一个冻结对话窗口（Context Chunk）或阶段（Directory） |
+| Context Chunk | 上下文块 / 冻结窗口 | 子类上下文的一种——一段被冻结的连续对话 |
+| Parent Context | 父类上下文 | 包含子类上下文的容器（工作区/阶段） |
 | Event Sourcing | 事件溯源 | 消息追加写入，从不修改删除 |
 | Context Lineage | 上下文谱系 | sourceFromId → sourceToId 精确追溯原文 |
 | Natural Boundary Detection | 自然边界检测 | Q&A 对和 Tool 调用原子性保护，不切断对话 |
