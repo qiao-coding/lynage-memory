@@ -1,10 +1,10 @@
-# Directory System · Generational Compaction · Hybrid Search
+# Directory System 目录系统 · Generational Compaction 代际压缩 · Hybrid Search 混合检索
 
 > Chunk 多了怎么管？目录树怎么生长？怎么快速找到历史？
 
 ---
 
-## 1. Directory Tree（目录树）
+## 1. Directory Tree 目录树
 
 ### 问题
 
@@ -53,7 +53,7 @@ Chunk-040                           └── Chunk-020
 
 ---
 
-## 2. Generational Compaction（代际压缩）
+## 2. Generational Compaction 代际压缩
 
 ### 问题
 
@@ -132,7 +132,7 @@ G0 满了 → 创建 G1 作为父目录 → G0 降级为 G1 的子节点。
 
 ---
 
-## 3. Hybrid Search（混合检索）
+## 3. Hybrid Search 混合检索
 
 ### 问题
 

@@ -1,10 +1,10 @@
-# Memory Layer · Context Compiler · Memory Action Validation
+# Memory Layer 记忆层 · Context Compiler 上下文编译器 · Memory Action Validation 记忆操作校验
 
 > 记忆怎么分层？模型看到的是什么？怎么安全地写回？
 
 ---
 
-## 1. 两层记忆：Working vs User
+## 1. 两层记忆：Working Memory 工作记忆 vs User Memory 用户记忆
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -47,7 +47,7 @@
 
 ---
 
-## 2. Context Compiler（上下文编译）
+## 2. Context Compiler 上下文编译器
 
 ### 问题
 
@@ -139,7 +139,7 @@ worker-search         项目快照 + 单个子目录摘要          并行 Worke
 
 ---
 
-## 3. Memory Action Validation（记忆写回校验）
+## 3. Memory Action Validation 记忆操作校验
 
 ### 问题
 

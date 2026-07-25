@@ -1,10 +1,10 @@
-# Event Sourcing · Context Lineage · Natural Boundary
+# Event Sourcing 事件溯源 · Context Lineage 上下文谱系 · Natural Boundary 自然边界
 
 > Lynage 最底层的三项核心技术：消息不可变追加、谱系追踪链、对话切分算法。
 
 ---
 
-## 1. Event Sourcing（事件溯源）
+## 1. Event Sourcing 事件溯源
 
 ### 是什么
 
@@ -42,7 +42,7 @@ messages 表（追加写入，只增不减）:
 
 ---
 
-## 2. Context Lineage（上下文谱系）
+## 2. Context Lineage 上下文谱系
 
 ### 是什么
 
@@ -96,7 +96,7 @@ lynageOpenSource("Chunk-003")
 
 ---
 
-## 3. Natural Boundary Detection（自然边界检测）
+## 3. Natural Boundary Detection 自然边界检测
 
 ### 是什么
 

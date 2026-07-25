@@ -1,10 +1,10 @@
-# Shared-Context Parallel Search · Source Verification
+# Shared-Context Parallel Search 共享上下文并行搜索 · Source Verification 原文验证
 
 > 多个 Worker 怎么同时搜？搜完怎么验证？
 
 ---
 
-## 1. Shared-Context Parallel Search（共享上下文并行搜索）
+## 1. Shared-Context Parallel Search 共享上下文并行搜索
 
 ### 问题
 
@@ -110,7 +110,7 @@ Worker 只读:
 
 ---
 
-## 2. Source Verification（原文验证）
+## 2. Source Verification 原文验证
 
 ### 问题
 
