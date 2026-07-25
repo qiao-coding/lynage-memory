@@ -1,6 +1,8 @@
 # Directory System 目录系统 · Generational Compaction 代际压缩 · Hybrid Search 混合检索
 
 > Chunk 多了怎么管？目录树怎么生长？怎么快速找到历史？
+>
+> **前置理解**：每个 Chunk 是一个冻结的上下文窗口。目录树就是用树结构来管理这些窗口。
 
 ---
 

@@ -1,6 +1,8 @@
 # Event Sourcing 事件溯源 · Context Lineage 上下文谱系 · Natural Boundary 自然边界
 
 > Lynage 最底层的三项核心技术：消息不可变追加、谱系追踪链、对话切分算法。
+>
+> **前置理解**：用户看到的是「上下文窗口」（一段连续对话）。系统内部用 msg ID 精确定位每条消息。Context Lineage 就是窗口和消息之间的"指针"——告诉你这个窗口里包含哪些消息。
 
 ---
 
