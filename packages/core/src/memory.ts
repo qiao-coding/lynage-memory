@@ -27,6 +27,7 @@ export class LynageMemory {
   private _model: LynageModel;
   private _config: LynageConfig;
   private _turnManager: TurnManager;
+  private _archiveManager: ArchiveManager;
   private _historyRetriever: HistoryRetriever;
   private _searchTaskManager: SearchTaskManager;
   private _sourceVerifier: SourceVerifier;
@@ -36,12 +37,12 @@ export class LynageMemory {
     this._store = options.store;
     this._model = options.model;
     this._config = { ...DEFAULT_CONFIG, ...options.config };
-    const archiveManager = new ArchiveManager(this._store, this._model, {
+    this._archiveManager = new ArchiveManager(this._store, this._model, {
       tokenThreshold: this._config.archiveThreshold,
       retainTokens: this._config.retainTokens,
       directoryCapacity: this._config.directoryCapacity,
     });
-    this._turnManager = new TurnManager(this._store, archiveManager);
+    this._turnManager = new TurnManager(this._store, this._archiveManager);
     this._historyRetriever = new HistoryRetriever(this._store);
     this._searchTaskManager = new SearchTaskManager(this._store);
     this._sourceVerifier = new SourceVerifier(this._store);
@@ -193,6 +194,11 @@ export class LynageMemory {
   // ---- History Search (M3: full implementation) ----
 
   /** Hybrid search: FTS + directory drill-down */
+  /** Trigger archive check (fire-and-forget safe — catches errors internally) */
+  async checkArchive(sessionId: string): Promise<ArchiveResult> {
+    return this._archiveManager.checkAndArchive(sessionId);
+  }
+
   async search(options: SearchParams): Promise<SearchResult> {
     return this._historyRetriever.search(options);
   }

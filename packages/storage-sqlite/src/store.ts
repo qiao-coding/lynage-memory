@@ -230,10 +230,9 @@ export class SqliteStore implements LynageStore {
     if (updates.importantChanges !== undefined) setData.important_changes = updates.importantChanges;
 
     if (Object.keys(setData).length > 0) {
-      await this.db
-        .update(schema.directories)
-        .set(setData)
-        .where(eq(schema.directories.id, id));
+      const cols = Object.keys(setData).map((k) => `${k} = ?`).join(", ");
+      const vals = Object.values(setData);
+      this.raw.prepare(`UPDATE directories SET ${cols} WHERE id = ?`).run(...vals, id);
     }
 
     return (await this.getDirectory(id))!;
@@ -241,10 +240,7 @@ export class SqliteStore implements LynageStore {
 
   /** Update a chunk's directory association (persisted to DB) */
   async updateChunkDirectory(chunkId: string, dirId: string): Promise<void> {
-    await this.db
-      .update(schema.contextChunks)
-      .set({ directoryId: dirId })
-      .where(eq(schema.contextChunks.id, chunkId));
+    this.raw.prepare("UPDATE context_chunks SET directory_id = ? WHERE id = ?").run(dirId, chunkId);
   }
 
   async getRootDirectories(sessionId: string): Promise<DirectoryNode[]> {
