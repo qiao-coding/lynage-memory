@@ -1,7 +1,5 @@
 # Lynage Memory
 
-> Agent 长期记忆，不需要上下文压缩。
-
 **[文档](docs/)** · **[架构](docs/02-how-it-works.md)** · **[Issues](https://github.com/qiao-coding/lynage-memory/issues)**
 
 ***
@@ -136,26 +134,23 @@ Lynage 给 LLM 的是**经过验证的原文片段**——先在本地用 FTS5 �
 
 ## 快速开始
 
+**零代码（MCP Server）** — Claude Desktop / Cursor 直接连接：
+
 ```bash
-git clone https://github.com/qiao-coding/lynage-memory
-cd lynage-memory
-pnpm install
+npx lynage-memory serve
 ```
 
-嵌入现有 Agent（三行代码）：
+**代码嵌入** — 一行搞定：
+
+```bash
+pnpm add lynage-memory
+```
 
 ```ts
-import { createDatabase, ensureTables, SqliteStore } from "@lynage/storage-sqlite";
+import { createLynageMemory } from "lynage-memory";
 import { AiSdkModel } from "@lynage/ai-sdk";
-import { LynageMemory } from "@lynage/core";
 
-const { db, raw } = createDatabase("./data/lynage.db");
-ensureTables(raw);
-
-const memory = new LynageMemory({
-  store: new SqliteStore(db, raw),
-  model: new AiSdkModel(yourLLM),
-});
+const memory = createLynageMemory({ model: new AiSdkModel(yourLLM) });
 
 // 在原有 Agent 循环中使用
 const turn = await memory.startTurn(threadId, userId, userInput);
@@ -163,7 +158,7 @@ const reply = await yourLLM.generate(turn.messages);
 await turn.finish({ response: reply });
 ```
 
-`startTurn()` 返回编译好的消息数组，直接喂给 LLM。`finishTurn()` 自动保存回复、检查 Token、触发归档。不改 Agent 架构。
+`startTurn()` 返回消息数组，直接喂 LLM。`finishTurn()` 自动保存回复、检查 Token、触发归档。不改 Agent 架构。
 
 运行测试：
 
@@ -171,7 +166,6 @@ await turn.finish({ response: reply });
 cp .env.example .env   # 填入 DEEPSEEK_API_KEY
 cd apps/test-runner && pnpm test   # 6/6 E2E
 pnpm test                           # 45/45 单元
-pnpm -r typecheck                   # 7/7 包
 ```
 
 ## 仓库布局
