@@ -1,12 +1,14 @@
-# Directory System 目录系统 · Generational Compaction 代际压缩 · Hybrid Search 混合检索
+# 阶段/窗口结构 · 升代 · 混合搜索
 
-> Chunk 多了怎么管？目录树怎么生长？怎么快速找到历史？
+> 术语见 [00-terminology.md](00-terminology.md)
 >
-> **前置理解**：每个 Chunk 是一个冻结的上下文窗口。目录树就是用树结构来管理这些窗口。
+> 窗口多了怎么管？怎么快速找到历史？
+>
+> **前置理解**：每个窗口 = 一段冻结的对话。阶段 = 窗口的容器，可嵌套。
 
 ---
 
-## 1. Directory Tree 目录树
+## 1. 阶段/窗口结构
 
 ### 问题
 
@@ -55,7 +57,7 @@ Chunk-040                           └── Chunk-020
 
 ---
 
-## 2. Generational Compaction 代际压缩
+## 2. 升代
 
 ### 问题
 
@@ -134,7 +136,7 @@ G0 满了 → 创建 G1 作为父目录 → G0 降级为 G1 的子节点。
 
 ---
 
-## 3. Hybrid Search 混合检索
+## 3. 混合搜索
 
 ### 问题
 

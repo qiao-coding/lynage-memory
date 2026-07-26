@@ -1,12 +1,14 @@
-# Shared-Context Parallel Search 共享上下文并行搜索 · Source Verification 原文验证
+# 并行搜索 · 原文验证
 
+> 术语见 [00-terminology.md](00-terminology.md)
+>
 > 多个 Worker 怎么同时搜？搜完怎么验证？
 >
-> **前置理解**：Worker 拿到的是「项目快照 + 分配给它的几个上下文窗口」。Worker 只读这些窗口，返回证据位置，不修改记忆。
+> **前置理解**：Worker 拿到项目快照 + 分配的几个窗口，只读不写，返回证据位置。
 
 ---
 
-## 1. Shared-Context Parallel Search 共享上下文并行搜索
+## 1. 并行搜索
 
 ### 问题
 
@@ -112,7 +114,7 @@ Worker 只读:
 
 ---
 
-## 2. Source Verification 原文验证
+## 2. 原文验证
 
 ### 问题
 
