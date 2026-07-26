@@ -3,7 +3,7 @@
 // Uses generateObject + Zod schemas for structured model output.
 // ---------------------------------------------------------------------------
 
-import { generateObject, type LanguageModelV1 } from "ai";
+import { generateObject, generateText, type LanguageModelV1 } from "ai";
 import type {
   LynageModel,
   ChunkSummaryInput,
@@ -33,27 +33,44 @@ export class AiSdkModel implements LynageModel {
   async summarizeChunk(input: ChunkSummaryInput): Promise<ChunkSummary> {
     const content = formatMessagesForSummary(input.messages, input.recentMemory);
 
-    const result = await retryWithValidation(
-      () =>
-        generateObject({
-          model: this.model,
-          schema: ChunkSummarySchema,
-          system:
-            this.systemPrompt +
-            "\nYou are a precise conversation archivist. Summarize the given conversation segment accurately.",
-          prompt: `Summarize the following conversation segment.
+    const prompt = `Summarize the following conversation segment.
 
 Focus on:
 - What was discussed and decided
 - How the work progressed (not just topics, but the flow of decisions)
 - Key terms and concepts mentioned
 
-${content}`,
-        }),
-      MAX_RETRIES,
-    );
+${content}`;
 
-    return result.object as ChunkSummary;
+    // Try generateObject first (structured output via tool_choice)
+    try {
+      const result = await retryWithValidation(
+        () =>
+          generateObject({
+            model: this.model,
+            schema: ChunkSummarySchema,
+            system:
+              this.systemPrompt +
+              "\nYou are a precise conversation archivist. Summarize the given conversation segment accurately.",
+            prompt,
+          }),
+        MAX_RETRIES,
+      );
+      return result.object as ChunkSummary;
+    } catch {
+      // Fallback: generateText + JSON parse (compatible with thinking models)
+      const text = await generateText({
+        model: this.model,
+        system: this.systemPrompt,
+        prompt: prompt + '\n\nReturn ONLY a JSON object with fields: {"summary": "...", "progress": "...", "keywords": [...]}',
+      });
+      const jsonMatch = text.text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = ChunkSummarySchema.parse(JSON.parse(jsonMatch[0]));
+        return parsed;
+      }
+      return { summary: text.text.slice(0, 200), progress: "Unknown", keywords: [] };
+    }
   }
 
   async summarizeDirectory(
@@ -66,15 +83,7 @@ ${content}`,
       )
       .join("\n\n");
 
-    const result = await retryWithValidation(
-      () =>
-        generateObject({
-          model: this.model,
-          schema: DirectorySummarySchema,
-          system:
-            this.systemPrompt +
-            "\nYou are a project historian. Synthesize multiple conversation segments into a coherent progress narrative.",
-          prompt: `Create a directory summary that synthesizes the following conversation segments.
+    const prompt = `Create a directory summary that synthesizes the following conversation segments.
 
 Time range: ${new Date(input.timeRangeStart).toISOString()} to ${new Date(input.timeRangeEnd).toISOString()}
 
@@ -82,15 +91,34 @@ Child segments:
 ${childList}
 
 Produce:
-- overallContent: A narrative summary of what happened across all these segments (NOT just "discussed X, Y, Z" — explain how the work progressed)
-- progress: How the project/task advanced during this period
-- mainConclusions: Key decisions or conclusions reached
-- importantChanges: Changes in direction, abandoned approaches, or significant corrections`,
-        }),
-      MAX_RETRIES,
-    );
+- overallContent: A narrative summary of what happened
+- progress: How the project advanced
+- mainConclusions: Key decisions reached
+- importantChanges: Changes in direction or abandoned approaches`;
 
-    return result.object as DirectorySummary;
+    try {
+      const result = await retryWithValidation(
+        () =>
+          generateObject({
+            model: this.model,
+            schema: DirectorySummarySchema,
+            system: this.systemPrompt,
+            prompt,
+          }),
+        MAX_RETRIES,
+      );
+      return result.object as DirectorySummary;
+    } catch {
+      const text = await generateText({
+        model: this.model,
+        prompt: prompt + '\n\nReturn ONLY JSON: {"overallContent":"...","progress":"...","mainConclusions":[...],"importantChanges":[...]}',
+      });
+      const jsonMatch = text.text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return DirectorySummarySchema.parse(JSON.parse(jsonMatch[0]));
+      }
+      return { overallContent: text.text.slice(0, 200), progress: "Unknown", mainConclusions: [], importantChanges: [] };
+    }
   }
 
   async analyzeSearchBatch(

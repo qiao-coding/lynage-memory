@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import type { LanguageModelV1 } from "ai";
-import { createDatabase, SqliteStore } from "@lynage/storage-sqlite";
+import { createDatabase, ensureTables, SqliteStore } from "@lynage/storage-sqlite";
 import { AiSdkModel } from "@lynage/ai-sdk";
 import { LynageMemory } from "@lynage/core";
 import { lynageStreamText } from "@lynage/ai-sdk";
@@ -18,6 +18,7 @@ let memory: LynageMemory | null = null;
 function getMemory(model: LanguageModelV1): LynageMemory {
   if (!memory) {
     const { db, raw } = createDatabase(DB_PATH);
+    ensureTables(raw);
     const store = new SqliteStore(db, raw);
     const aiModel = new AiSdkModel(model);
     memory = new LynageMemory({ store, model: aiModel });
