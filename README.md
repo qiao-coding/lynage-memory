@@ -196,10 +196,6 @@ Core 不绑定模型厂商。通过 `LynageModel` 接口适配任意 LLM。
 
 所有数据存在本地 SQLite。没有 Lynage 服务器。LLM 调用走你配置的 API。
 
-## 致谢
-
-设计参考了 Hermes 的 Memory Provider 接口和 Session Storage 方案。
-
 ## 许可证
 
 MIT
