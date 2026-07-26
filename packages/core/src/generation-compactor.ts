@@ -39,6 +39,7 @@ export class GenerationCompactor {
 
   /**
    * Check if a directory needs compaction and execute if so.
+   * Recursive: after compacting, checks if the new parent also needs compaction.
    */
   async checkAndCompact(directoryId: string): Promise<CompactResult> {
     const dir = await this.store.getDirectory(directoryId);
@@ -46,12 +47,18 @@ export class GenerationCompactor {
 
     const children = await this.store.getDirectoryChildren(directoryId);
 
-    // Only compact if exceeding capacity
     if (children.length < this.capacity) {
       return { compacted: false };
     }
 
-    return this.compact(directoryId, dir);
+    const result = await this.compact(directoryId, dir);
+
+    // Recursively check if the new parent also needs compaction
+    if (result.compacted && result.newParentId) {
+      await this.checkAndCompact(result.newParentId);
+    }
+
+    return result;
   }
 
   /**

@@ -2,7 +2,7 @@
 // SqliteStore — LynageStore implementation backed by SQLite + Drizzle ORM
 // ---------------------------------------------------------------------------
 
-import { eq, and, gte, lte, desc, asc, count } from "drizzle-orm";
+import { eq, and, gte, lte, desc, asc, count, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type Database from "better-sqlite3";
@@ -255,6 +255,7 @@ export class SqliteStore implements LynageStore {
         and(
           eq(schema.directories.sessionId, sessionId),
           eq(schema.directories.generation, 0),
+          isNull(schema.directories.parentId),
         ),
       )
       .orderBy(asc(schema.directories.createdAt));
