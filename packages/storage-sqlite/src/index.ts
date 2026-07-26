@@ -20,17 +20,19 @@ export interface CreateLynageMemoryOptions {
 }
 
 /**
- * One-line setup. Creates SQLite database, tables, and returns a ready-to-use LynageMemory.
+ * One-line setup with sensible defaults.
  *
  * ```ts
  * import { createLynageMemory } from "@lynage/storage-sqlite";
- * import { AiSdkModel } from "@lynage/ai-sdk";
- *
- * const memory = createLynageMemory({ model: new AiSdkModel(yourLLM) });
+ * const memory = createLynageMemory();
+ * // → SQLite at ./data/lynage.db, tables auto-created, WAL + FTS5 enabled
  * ```
  *
- * If model is not provided at creation time, you can set it later.
- * Without a model, archiving (AI summary generation) won't work.
+ * Add a model to enable AI-powered archiving and search:
+ * ```ts
+ * import { AiSdkModel } from "@lynage/ai-sdk";
+ * const memory = createLynageMemory({ model: new AiSdkModel(yourLLM) });
+ * ```
  */
 export function createLynageMemory(options: CreateLynageMemoryOptions = {}): LynageMemory {
   const dbPath = options.dbPath ?? "./data/lynage.db";
@@ -39,10 +41,9 @@ export function createLynageMemory(options: CreateLynageMemoryOptions = {}): Lyn
   ensureTables(raw);
   const store = new SqliteStore(db, raw);
 
-  if (!options.model) {
-    // Return without model — basic message storage works, archiving won't
-    return new LynageMemory({ store, model: {} as LynageModel, config: options.config });
-  }
-
-  return new LynageMemory({ store, model: options.model, config: options.config });
+  return new LynageMemory({
+    store,
+    model: options.model ?? ({} as LynageModel),
+    config: options.config,
+  });
 }

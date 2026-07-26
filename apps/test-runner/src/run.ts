@@ -51,7 +51,7 @@ const aiModel = new AiSdkModel(model);
 const memory = new LynageMemory({
   store,
   model: aiModel,
-  config: { archiveThreshold: 800, retainTokens: 300, directoryCapacity: 5 },
+  config: { archiveThreshold: 1500, retainTokens: 1000, directoryCapacity: 3 },
 });
 
 const SESSION = "test-session";
@@ -85,7 +85,7 @@ async function chat(prompt: string): Promise<string> {
 // ---- Main ----
 async function main() {
   hr("Lynage Memory E2E Test — DeepSeek");
-  console.log(`Model: ${MODEL_NAME} | Threshold: 800 tokens | Capacity: 5`);
+  console.log(`Model: ${MODEL_NAME} | Threshold: 300 tokens | Capacity: 3`);
   console.log(`DB: ${DB_PATH}\n`);
 
   // ── Test 1: Turn Lifecycle ──
@@ -122,7 +122,8 @@ async function main() {
   const msgCount3 = await store.getMessageCount(SESSION);
   const chunks = await store.listChunks(SESSION);
   const dirs = await store.getRootDirectories(SESSION);
-  console.log(`\n  Messages: ${msgCount3} | Chunks: ${chunks.length} | Directories: ${dirs.length}`);
+  const estTokens = await store.getEstimatedTokenCount(SESSION);
+  console.log(`\n  Messages: ${msgCount3} | Est Tokens: ${estTokens} | Chunks: ${chunks.length} | Directories: ${dirs.length}`);
   console.log(`  ${chunks.length > 0 ? "✅" : "⚠️ "} Archiving (${chunks.length} chunks created)`);
   if (chunks.length > 0) {
     console.log(`     Chunk #1: ${chunks[0]!.summary.slice(0, 80)}`);

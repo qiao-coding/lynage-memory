@@ -12,8 +12,19 @@ import type { Message } from "./types.js";
  */
 export function estimateTokenCount(text: string): number {
   if (!text) return 0;
-  // 4 chars ≈ 1 token is a common rule of thumb
-  return Math.ceil(text.length / 4);
+  // Chinese/CJK characters ≈ 1 token each, Latin ≈ 4 chars per token
+  let tokens = 0;
+  for (const ch of text) {
+    const code = ch.charCodeAt(0);
+    if (code >= 0x4e00 && code <= 0x9fff) {
+      tokens += 1; // CJK: ~1 token per char
+    } else if (ch === " " || code < 128) {
+      tokens += 0.25; // ASCII: ~4 chars per token
+    } else {
+      tokens += 0.5; // Other (CJK punctuation etc): ~2 chars per token
+    }
+  }
+  return Math.ceil(tokens);
 }
 
 /**

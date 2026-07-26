@@ -240,10 +240,10 @@ export class SqliteStore implements LynageStore {
   }
 
   /** Update a chunk's directory association (persisted to DB) */
-  async updateChunkDirectory(chunkId: string, directoryId: string): Promise<void> {
+  async updateChunkDirectory(chunkId: string, dirId: string): Promise<void> {
     await this.db
       .update(schema.contextChunks)
-      .set({ directoryId })
+      .set({ directoryId: dirId })
       .where(eq(schema.contextChunks.id, chunkId));
   }
 
