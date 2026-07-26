@@ -134,19 +134,13 @@ Lynage 给 LLM 的是**经过验证的原文片段**——先在本地用 FTS5 �
 
 ## 快速开始
 
-## 两种使用方式
-
-### 方式一：零代码 — 作为 Hermes / MCP 插件
-
-Hermes Agent 通过 Memory Provider 接口接入，Lynage 实现相同的接口。安装即用：
+## 安装
 
 ```bash
-npx lynage-memory serve
+pnpm add lynage-memory
 ```
 
-Claude Desktop / Cursor 等 MCP 客户端直接连接。也支持作为 Hermes Memory Provider 插件使用。
-
-### 方式二：代码嵌入 — 和普通 Memory 一样的用法
+### 代码嵌入
 
 ```bash
 pnpm add lynage-memory
@@ -175,21 +169,21 @@ import { AiSdkModel } from "@lynage/ai-sdk";
 const memory = createLynageMemory({ model: new AiSdkModel(yourLLM) });
 ```
 
-### API 一览（对标标准 Memory Provider 接口）
+### API 一览
 
-| 方法 | 对应标准接口 | 做什么 |
-|------|-------------|--------|
-| `memory.startTurn()` | `prefetch()` | 编译上下文，返回消息数组喂给 LLM |
-| `memory.finishTurn()` | `sync_turn()` | 保存回复，自动归档 |
-| `memory.search()` | `recall()` / `memory_search` | 搜索历史窗口，返回原文位置 |
-| `memory.openSource()` | — | 打开窗口读原始消息 |
-| `memory.commit()` | `memory_add` / `memory_remove` | 增量写回工作记忆 |
-| `memory.getWorkingMemory()` | — | 读取当前工作记忆 |
+| 方法 | 做什么 |
+|------|--------|
+| `memory.startTurn(threadId, userId, input)` | 保存用户消息，返回编译好的上下文 |
+| `memory.finishTurn({ response })` | 保存回复，自动检查 Token 并归档 |
+| `memory.search({ query, sessionId })` | 搜索历史窗口 |
+| `memory.openSource(contextId)` | 打开窗口读原始消息 |
+| `memory.commit(actions)` | 增量写回工作记忆 |
+| `memory.getWorkingMemory(sessionId)` | 读取当前工作记忆 |
 
 运行测试：
 
 ```bash
-cp .env.example .env   # 填入 DEEPSEEK_API_KEY
+# 在 .env 填入 DEEPSEEK_API_KEY
 cd apps/test-runner && pnpm test   # 6/6 E2E
 pnpm test                           # 45/45 单元
 ```
