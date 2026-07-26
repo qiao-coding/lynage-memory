@@ -13,7 +13,7 @@ import { HistoryRetriever, type SearchParams, type SearchResult, type DirectoryT
 import { SearchTaskManager, type StartSearchInput, type SearchBatch, type SearchAnalysis } from "./search-task-manager.js";
 import { SourceVerifier, type VerifiedCandidate } from "./source-verifier.js";
 import { ParallelSearchCoordinator, type ProjectSnapshot, type ParallelSearchResult } from "./parallel-search-coordinator.js";
-import type { MemoryAction } from "./schemas.js";
+import { validateMemoryActions, type MemoryAction } from "./schemas.js";
 import type { SearchTask } from "./types.js";
 
 export interface LynageMemoryOptions {
@@ -106,7 +106,9 @@ export class LynageMemory {
    * Validates each action before applying.
    */
   async commit(actions: MemoryAction[], sessionId = "default"): Promise<void> {
-    for (const action of actions) {
+    // Zod schema validation — rejects malformed actions before any writes
+    const validated = validateMemoryActions(actions);
+    for (const action of validated) {
       if (!action.target || !action.operation || !action.section || !action.value) {
         continue;
       }

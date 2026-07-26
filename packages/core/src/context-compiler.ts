@@ -38,6 +38,7 @@ export interface CompileOptions {
   searchQuery?: string;
   /** Worker snapshot (worker-search view, M8) */
   workerSnapshot?: { snapshotId: string; question: string; directoryId: string };
+  /** Soft limit. Token bounding is primarily handled by ArchiveManager, not the compiler. */
   maxTokens?: number;
 }
 
