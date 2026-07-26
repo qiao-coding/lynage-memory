@@ -17,6 +17,7 @@
 | [04-directory-system.md](04-directory-system.md) | 阶段/窗口结构 · 升代 · 混合搜索 |
 | [05-memory-layer.md](05-memory-layer.md) | 工作记忆 / 用户画像 · 编译器 6 视图 · 写回校验 |
 | [06-parallel-search.md](06-parallel-search.md) | 并行搜索 · 原文验证 |
+| [07-conclusion-pipeline.md](07-conclusion-pipeline.md) | 结论与概述：从消息到结论的完整提炼管道 |
 
 ## 术语速查
 
