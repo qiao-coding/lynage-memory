@@ -134,13 +134,19 @@ Lynage 给 LLM 的是**经过验证的原文片段**——先在本地用 FTS5 �
 
 ## 快速开始
 
-**零代码（MCP）** — Claude Desktop / Cursor 直接连接：
+## 两种使用方式
+
+### 方式一：零代码 — 作为 Hermes / MCP 插件
+
+Hermes Agent 通过 Memory Provider 接口接入，Lynage 实现相同的接口。安装即用：
 
 ```bash
 npx lynage-memory serve
 ```
 
-**代码嵌入** — 一行初始化，和普通 Memory 一样用：
+Claude Desktop / Cursor 等 MCP 客户端直接连接。也支持作为 Hermes Memory Provider 插件使用。
+
+### 方式二：代码嵌入 — 和普通 Memory 一样的用法
 
 ```bash
 pnpm add lynage-memory
@@ -149,20 +155,36 @@ pnpm add lynage-memory
 ```ts
 import { createLynageMemory } from "lynage-memory";
 
-const memory = createLynageMemory();  // SQLite 自动创建，零配置
+// 一行初始化，SQLite 自动创建
+const memory = createLynageMemory();
 
-// 在原有 Agent 循环中使用
+// Agent 循环中使用
 const turn = await memory.startTurn(threadId, userId, userInput);
 const reply = await yourLLM.generate(turn.messages);
 await turn.finish({ response: reply });
+
+// 搜索历史
+const result = await memory.search({ query: "数据库方案", sessionId: threadId });
+const messages = await memory.openSource(result.candidates[0].contextId);
 ```
 
-接入 LLM 后可启用 AI 归档和搜索（可选）：
+接入 LLM 后启用 AI 归档和搜索（可选）：
 
 ```ts
 import { AiSdkModel } from "@lynage/ai-sdk";
 const memory = createLynageMemory({ model: new AiSdkModel(yourLLM) });
 ```
+
+### API 一览（对标标准 Memory Provider 接口）
+
+| 方法 | 对应标准接口 | 做什么 |
+|------|-------------|--------|
+| `memory.startTurn()` | `prefetch()` | 编译上下文，返回消息数组喂给 LLM |
+| `memory.finishTurn()` | `sync_turn()` | 保存回复，自动归档 |
+| `memory.search()` | `recall()` / `memory_search` | 搜索历史窗口，返回原文位置 |
+| `memory.openSource()` | — | 打开窗口读原始消息 |
+| `memory.commit()` | `memory_add` / `memory_remove` | 增量写回工作记忆 |
+| `memory.getWorkingMemory()` | — | 读取当前工作记忆 |
 
 运行测试：
 
