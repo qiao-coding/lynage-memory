@@ -8,7 +8,7 @@ import type { LynageModel } from "./model.js";
 import type { LynageConfig, MessageInput } from "./types.js";
 import { DEFAULT_CONFIG } from "./types.js";
 import { TurnManager, type TurnHandle } from "./turn.js";
-import { ArchiveManager } from "./archive-manager.js";
+import { ArchiveManager, type ArchiveResult } from "./archive-manager.js";
 import { HistoryRetriever, type SearchParams, type SearchResult, type DirectoryTreeNode, type SearchCandidate } from "./history-retriever.js";
 import { SearchTaskManager, type StartSearchInput, type SearchBatch, type SearchAnalysis } from "./search-task-manager.js";
 import { SourceVerifier, type VerifiedCandidate } from "./source-verifier.js";
