@@ -78,6 +78,7 @@ export class TurnManager {
       userId,
       role: "user",
       content: input,
+      tokenCount: estimateTokenCount(input),
     });
 
     // 2. Get recent context
@@ -142,12 +143,14 @@ export class TurnManager {
     // Save tool calls
     if (input.toolCalls) {
       for (const tc of input.toolCalls) {
+        const tcContent = JSON.stringify(tc.args);
         const msg = await this.store.appendMessage({
           sessionId,
           role: "tool",
-          content: JSON.stringify(tc.args),
+          content: tcContent,
           toolCallId: tc.toolCallId,
           toolName: tc.toolName,
+          tokenCount: estimateTokenCount(tcContent),
         });
         toolMessages.push(msg);
       }
@@ -164,6 +167,7 @@ export class TurnManager {
           role: "tool",
           content,
           toolCallId: tr.toolCallId,
+          tokenCount: estimateTokenCount(content),
         });
         toolMessages.push(msg);
       }
@@ -174,7 +178,7 @@ export class TurnManager {
       assistantTokens +
       toolMessages.reduce((sum, m) => sum + (m.tokenCount ?? 0), 0);
 
-    // Trigger archiving if configured
+    // Trigger archiving (serialized per-session via mutex to prevent races)
     if (this.archiveManager) {
       await this.archiveManager.checkAndArchive(sessionId);
     }

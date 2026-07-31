@@ -9,7 +9,7 @@ import type { LynageConfig, MessageInput } from "./types.js";
 import { DEFAULT_CONFIG } from "./types.js";
 import { TurnManager, type TurnHandle } from "./turn.js";
 import { ArchiveManager, type ArchiveResult } from "./archive-manager.js";
-import { HistoryRetriever, type SearchParams, type SearchResult, type DirectoryTreeNode, type SearchCandidate } from "./history-retriever.js";
+import { HistoryRetriever, type SearchParams, type SearchResult, type DirectoryTreeNode, type SearchCandidate, type OpenSourceResult } from "./history-retriever.js";
 import { SearchTaskManager, type StartSearchInput, type SearchBatch, type SearchAnalysis } from "./search-task-manager.js";
 import { SourceVerifier, type VerifiedCandidate } from "./source-verifier.js";
 import { ParallelSearchCoordinator, type ProjectSnapshot, type ParallelSearchResult } from "./parallel-search-coordinator.js";
@@ -106,7 +106,7 @@ export class LynageMemory {
    * Commit memory actions proposed by the model.
    * Validates each action before applying.
    */
-  async commit(actions: MemoryAction[], sessionId = "default"): Promise<void> {
+  async commit(actions: MemoryAction[], sessionId = "default", userId?: string): Promise<void> {
     // Zod schema validation — rejects malformed actions before any writes
     const validated = validateMemoryActions(actions);
     for (const action of validated) {
@@ -119,6 +119,7 @@ export class LynageMemory {
         const current = wm ?? {
           id: "",
           sessionId,
+          currentTask: undefined,
           confirmed: [] as string[],
           progress: [] as string[],
           unresolved: [] as string[],
@@ -131,7 +132,7 @@ export class LynageMemory {
           const val = current[section];
           if (Array.isArray(val)) {
             val.push(action.value);
-          } else if (typeof val === "string") {
+          } else if (typeof val === "string" || val === undefined) {
             (current as unknown as Record<string, unknown>)[section] = action.value;
           }
         } else if (action.operation === "remove") {
@@ -152,11 +153,11 @@ export class LynageMemory {
           recentChanges: current.recentChanges,
         });
       } else if (action.target === "userMemory") {
-        const userId = sessionId; // In many cases userId === sessionId
-        const um = await this._store.getUserMemory(userId);
+        const effectiveUserId = userId ?? sessionId;
+        const um = await this._store.getUserMemory(effectiveUserId);
         const current = um ?? {
           id: "",
-          userId,
+          userId: effectiveUserId,
           preferences: [] as string[],
           longTermGoals: [] as string[],
           constraints: [] as string[],
@@ -181,7 +182,7 @@ export class LynageMemory {
         }
 
         await this._store.upsertUserMemory({
-          userId,
+          userId: effectiveUserId,
           preferences: current.preferences,
           longTermGoals: current.longTermGoals,
           constraints: current.constraints,
@@ -224,8 +225,8 @@ export class LynageMemory {
     return this._parallelSearch.search(sessionId, snapshot);
   }
 
-  /** Open original source messages for a chunk */
-  async openSource(contextId: string) {
+  /** Open original source messages for a chunk, with directory context */
+  async openSource(contextId: string): Promise<OpenSourceResult | null> {
     return this._historyRetriever.openSource(contextId);
   }
 

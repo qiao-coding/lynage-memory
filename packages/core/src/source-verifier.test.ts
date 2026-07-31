@@ -17,6 +17,7 @@ class MockStore implements LynageStore {
   async getRecent(scope: { sessionId: string }) { return this.messages.filter(m => m.sessionId === scope.sessionId); }
   async listChunks() { return Array.from(this.chunks.values()); }
   async getChunk(id: string) { return this.chunks.get(id) ?? null; }
+  async getChunksByIds(ids: string[]) { return ids.map(id => this.chunks.get(id)).filter(Boolean) as any; }
 
   // Unused stubs
   async appendMessage() { return {} as Message; }
@@ -31,6 +32,7 @@ class MockStore implements LynageStore {
   async getRootDirectories() { return []; }
   async getChildDirectories() { return []; }
   async addChildToDirectory() {}
+  async removeChildFromDirectory() {}
   async getDirectoryChildren() { return []; }
   async getWorkingMemory() { return null; }
   async upsertWorkingMemory() { return {} as never; }

@@ -15,11 +15,11 @@ export function createLynageMcpTools(memory: LynageMemory) {
       },
       handler: async (args: { sessionId: string }) => {
         const wm = await memory.getWorkingMemory(args.sessionId);
-        if (!wm) return { content: [{ type: "text", text: "No working memory found for this session." }] };
+        if (!wm) return { content: [{ type: "text" as const, text: "No working memory found for this session." }] };
         return {
           content: [
             {
-              type: "text",
+              type: "text" as const,
               text: [
                 `# Working Memory (${args.sessionId})`,
                 wm.currentTask ? `\n## Current Task\n${wm.currentTask}` : "",
@@ -49,7 +49,7 @@ export function createLynageMcpTools(memory: LynageMemory) {
       handler: async (args: { query: string; sessionId: string }) => {
         const result = await memory.search(args);
         const text = memory.compileRetrievedContext(result);
-        return { content: [{ type: "text", text }] };
+        return { content: [{ type: "text" as const, text }] };
       },
     },
 
@@ -60,14 +60,26 @@ export function createLynageMcpTools(memory: LynageMemory) {
         contextId: z.string().describe("Context chunk ID from search results"),
       },
       handler: async (args: { contextId: string }) => {
-        const messages = await memory.openSource(args.contextId);
-        if (!messages || messages.length === 0) {
-          return { content: [{ type: "text", text: "No messages found for this context ID." }] };
+        const result = await memory.openSource(args.contextId);
+        if (!result || result.messages.length === 0) {
+          return { content: [{ type: "text" as const, text: "No messages found for this context ID." }] };
         }
-        const text = messages
+        const parts: string[] = [];
+        if (result.directoryContext) {
+          parts.push(
+            `## Phase Context (Generation ${result.directoryContext.generation})\n` +
+            `${result.directoryContext.overallContent}\n` +
+            (result.directoryContext.mainConclusions.length > 0
+              ? `Conclusions: ${result.directoryContext.mainConclusions.join("; ")}\n` : "") +
+            (result.directoryContext.importantChanges.length > 0
+              ? `Key Changes: ${result.directoryContext.importantChanges.join("; ")}\n` : "")
+          );
+        }
+        parts.push(result.messages
           .map((m) => `[${m.role.toUpperCase()}] ${m.content}`)
-          .join("\n\n---\n\n");
-        return { content: [{ type: "text", text }] };
+          .join("\n\n---\n\n"));
+        const text = parts.join("\n");
+        return { content: [{ type: "text" as const, text }] };
       },
     },
 
@@ -97,7 +109,7 @@ export function createLynageMcpTools(memory: LynageMemory) {
           ],
           args.sessionId ?? "default",
         );
-        return { content: [{ type: "text", text: `Memory updated: ${args.operation} "${args.value}" to ${args.section}` }] };
+        return { content: [{ type: "text" as const, text: `Memory updated: ${args.operation} "${args.value}" to ${args.section}` }] };
       },
     },
 
@@ -109,11 +121,11 @@ export function createLynageMcpTools(memory: LynageMemory) {
       },
       handler: async (args: { userId: string }) => {
         const um = await memory.getUserMemory(args.userId);
-        if (!um) return { content: [{ type: "text", text: "No user memory found for this user." }] };
+        if (!um) return { content: [{ type: "text" as const, text: "No user memory found for this user." }] };
         return {
           content: [
             {
-              type: "text",
+              type: "text" as const,
               text: [
                 `# User Memory (${args.userId})`,
                 um.preferences.length > 0
@@ -143,7 +155,7 @@ export function createLynageMcpTools(memory: LynageMemory) {
         return {
           content: [
             {
-              type: "text",
+              type: "text" as const,
               text: [
                 `# Archive Stats (${args.sessionId})`,
                 `- Messages: ${stats.messageCount}`,

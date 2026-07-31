@@ -24,6 +24,7 @@ class MockStoreForSearch implements LynageStore {
   async getMessageCount() { return this.messages.length; }
   async createChunk() { return {} as ContextChunk; }
   async getChunk(id: string) { return this.chunks.get(id) ?? null; }
+  async getChunksByIds(ids: string[]) { return ids.map(id => this.chunks.get(id)).filter((c): c is NonNullable<typeof c> => c != null); }
   async getChunksByDirectory() { return []; }
   async listChunks() { return Array.from(this.chunks.values()); }
   async updateChunkDirectory() {}
@@ -41,6 +42,7 @@ class MockStoreForSearch implements LynageStore {
       .filter(Boolean) as DirectoryNode[];
   }
   async addChildToDirectory() {}
+  async removeChildFromDirectory() {}
   async getDirectoryChildren(dirId: string) {
     const kids = this.children.get(dirId) ?? [];
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -133,10 +135,10 @@ describe("HistoryRetriever", () => {
       createdAt: 7000,
     });
 
-    const messages = await retriever.openSource("c2");
-    expect(messages).not.toBeNull();
-    expect(messages!.length).toBe(2);
-    expect(messages![0]?.content).toContain("architecture");
+    const result = await retriever.openSource("c2");
+    expect(result).not.toBeNull();
+    expect(result!.messages.length).toBe(2);
+    expect(result!.messages[0]?.content).toContain("architecture");
   });
 
   it("compileRetrievedContext produces readable text", () => {

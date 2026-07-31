@@ -78,6 +78,7 @@ export interface LynageStore {
   // context chunks
   createChunk(input: CreateChunkInput): Promise<ContextChunk>;
   getChunk(id: string): Promise<ContextChunk | null>;
+  getChunksByIds(ids: string[]): Promise<ContextChunk[]>;
   getChunksByDirectory(directoryId: string): Promise<ContextChunk[]>;
   listChunks(sessionId: string): Promise<ContextChunk[]>;
   updateChunkDirectory(chunkId: string, directoryId: string): Promise<void>;
@@ -92,6 +93,7 @@ export interface LynageStore {
   getRootDirectories(sessionId: string): Promise<DirectoryNode[]>;
   getChildDirectories(parentId: string): Promise<DirectoryNode[]>;
   addChildToDirectory(child: DirectoryChild): Promise<void>;
+  removeChildFromDirectory(directoryId: string, childId: string): Promise<void>;
   getDirectoryChildren(directoryId: string): Promise<DirectoryChild[]>;
 
   // working memory

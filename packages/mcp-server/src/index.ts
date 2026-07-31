@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { LynageMemory } from "@lynage/core";
-import { createDatabase, SqliteStore } from "@lynage/storage-sqlite";
+import { createDatabase, ensureTables, SqliteStore } from "@lynage/storage-sqlite";
 import type { LynageModel } from "@lynage/core";
 import { createLynageMcpTools } from "./tools.js";
 
@@ -28,6 +28,7 @@ export interface McpServerOptions {
  */
 export function createLynageMcpServer(options: McpServerOptions) {
   const { db, raw } = createDatabase(options.dbPath);
+  ensureTables(raw);
   const store = new SqliteStore(db, raw);
 
   const memory = new LynageMemory({

@@ -106,24 +106,6 @@ function isNaturalBoundary(messages: Message[], i: number): boolean {
  * Scans forward to see if any tool call lacks a matching result.
  */
 function hasUnresolvedToolCalls(messages: Message[], i: number): boolean {
-  const pendingCalls = new Set<string>();
-
-  // Scan all messages from start to ensure correctness
-  for (let idx = 0; idx <= i; idx++) {
-    const msg = messages[idx]!;
-    if (msg.role === "tool" && msg.toolCallId && !msg.toolName) {
-      // This is a tool result (has toolCallId but toolName is often empty)
-      // Actually, we need a better way to distinguish tool calls from results
-      // For now: assume tool messages without content are calls, with content are results
-    }
-    // Track based on whether it's a call or result
-  }
-
-  // Simpler approach: just check if the last assistant before position i
-  // has tool calls that haven't been resolved
-  // Tool call = role "tool" with toolName set (the invocation)
-  // Tool result = role "tool" with toolCallId matching a prior call
-
   const calls = new Map<string, number>(); // toolCallId → count
   const results = new Map<string, number>(); // toolCallId → count
 

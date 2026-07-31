@@ -4,6 +4,9 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "bin": {
+    "lynage-memory": "./src/cli.ts"
+  },
   "exports": {
     ".": {
       "import": "./src/index.ts",
@@ -20,9 +23,14 @@
     "@lynage/storage-sqlite": "workspace:*",
     "@lynage/ai-sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "zod": "^3.24.0"
-  },
-  "devDependencies": {
+    "ai": "^4.3.0",
+    "zod": "^3.24.0",
     "tsx": "^4.19.0"
+  },
+  "devDependencies": {},
+  "optionalDependencies": {
+    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/deepseek": "^0.2.0",
+    "@ai-sdk/anthropic": "^1.0.0"
   }
 }

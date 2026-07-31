@@ -16,8 +16,8 @@ export function estimateTokenCount(text: string): number {
   let tokens = 0;
   for (const ch of text) {
     const code = ch.charCodeAt(0);
-    if (code >= 0x4e00 && code <= 0x9fff) {
-      tokens += 1; // CJK: ~1 token per char
+    if ((code >= 0x4e00 && code <= 0x9fff) || (code >= 0x3400 && code <= 0x4dbf)) {
+      tokens += 1; // CJK Unified + Extension A: ~1 token per char
     } else if (ch === " " || code < 128) {
       tokens += 0.25; // ASCII: ~4 chars per token
     } else {
@@ -34,7 +34,7 @@ export function estimateMessagesTokenCount(messages: Message[]): number {
   let total = 0;
   for (const msg of messages) {
     // If the message already has a recorded tokenCount, use it
-    if (msg.tokenCount) {
+    if (msg.tokenCount != null) {
       total += msg.tokenCount;
     } else {
       total += estimateTokenCount(msg.content);

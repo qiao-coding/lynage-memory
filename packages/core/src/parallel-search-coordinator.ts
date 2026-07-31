@@ -13,7 +13,7 @@
 
 import type { LynageStore } from "./store.js";
 import type { Message, DirectoryNode, ContextChunk } from "./types.js";
-import type { HistoryRetriever, SearchCandidate } from "./history-retriever.js";
+import type { HistoryRetriever, SearchCandidate, DirectoryContext } from "./history-retriever.js";
 import { SourceVerifier, type VerifiedCandidate } from "./source-verifier.js";
 
 // ---- Types ----
@@ -37,6 +37,7 @@ export interface WorkerResult {
   workerId: string;
   checkedNodes: string[];
   candidates: Array<{
+    chunkId: string;
     sourceRange: { from: string; to: string };
     reason: string;
     confidence: number;
@@ -130,15 +131,35 @@ export class ParallelSearchCoordinator {
     const deduped = this.deduplicateCandidates(allCandidates);
 
     // ---- Step 5: Verify candidates against original messages ----
-    const searchCandidates: SearchCandidate[] = deduped.map((c) => ({
-      contextId: `worker-${c.sourceRange.from}`,
-      summary: c.reason,
-      progress: "",
-      keywords: [],
-      sourceRange: c.sourceRange,
-      timeRange: { start: 0, end: 0 },
-      relevance: c.confidence,
-    }));
+    const searchCandidates: SearchCandidate[] = await Promise.all(
+      deduped.map(async (c) => {
+        let directoryContext: DirectoryContext | undefined;
+        const chunk = await this.store.getChunk(c.chunkId);
+        if (chunk?.directoryId) {
+          const dir = await this.store.getDirectory(chunk.directoryId);
+          if (dir) {
+            directoryContext = {
+              directoryId: dir.id,
+              generation: dir.generation,
+              overallContent: dir.overallContent,
+              progress: dir.progress,
+              mainConclusions: dir.mainConclusions,
+              importantChanges: dir.importantChanges,
+            };
+          }
+        }
+        return {
+          contextId: c.chunkId,
+          summary: c.reason,
+          progress: "",
+          keywords: [],
+          sourceRange: c.sourceRange,
+          timeRange: { start: 0, end: 0 },
+          relevance: c.confidence,
+          directoryContext,
+        };
+      }),
+    );
 
     const verified = await this.verifier.verifyBatch(
       searchCandidates,
@@ -172,9 +193,12 @@ export class ParallelSearchCoordinator {
    * Single worker: reads one directory, searches for evidence matching the snapshot question.
    * Returns only evidence positions — does NOT modify Working Memory.
    */
-  private async runWorker(input: WorkerInput): Promise<WorkerResult> {
+  private async runWorker(input: WorkerInput, visited = new Set<string>()): Promise<WorkerResult> {
     const checkedNodes: string[] = [];
     const candidates: WorkerResult["candidates"] = [];
+
+    if (visited.has(input.directoryId)) return { workerId: input.workerId, checkedNodes: [], candidates: [] }; // Prevent cycles
+    visited.add(input.directoryId);
 
     const dir = await this.store.getDirectory(input.directoryId);
     if (!dir) {
@@ -205,6 +229,7 @@ export class ParallelSearchCoordinator {
 
         if (chunkRelevance > 0.3) {
           candidates.push({
+            chunkId: chunk.id,
             sourceRange: {
               from: chunk.sourceFromId,
               to: chunk.sourceToId,
@@ -339,13 +364,16 @@ export class ParallelSearchCoordinator {
 
   private async flattenDirectoryTree(rootIds: string[]): Promise<string[]> {
     const result: string[] = [];
+    const visited = new Set<string>();
     const queue = [...rootIds];
     while (queue.length > 0) {
       const id = queue.shift()!;
+      if (visited.has(id)) continue; // Prevent infinite loops from circular refs
+      visited.add(id);
       result.push(id);
       const children = await this.store.getDirectoryChildren(id);
       for (const child of children) {
-        if (child.childType === "directory") {
+        if (child.childType === "directory" && !visited.has(child.childId)) {
           queue.push(child.childId);
         }
       }

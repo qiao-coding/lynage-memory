@@ -90,6 +90,8 @@ export type {
   SearchResult,
   SearchCandidate,
   DirectoryTreeNode,
+  DirectoryContext,
+  OpenSourceResult,
 } from "./history-retriever.js";
 
 // Generational compaction

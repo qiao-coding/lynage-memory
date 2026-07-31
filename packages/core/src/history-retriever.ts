@@ -19,20 +19,21 @@ export interface SearchParams {
   limit?: number;
 }
 
+export interface DirectoryContext {
+  directoryId: string; generation: number;
+  overallContent: string; progress: string;
+  mainConclusions: string[]; importantChanges: string[];
+}
 export interface SearchCandidate {
-  contextId: string;
-  summary: string;
-  progress: string;
-  keywords: string[];
-  sourceRange: {
-    from: string;
-    to: string;
-  };
-  timeRange: {
-    start: number;
-    end: number;
-  };
+  contextId: string; summary: string; progress: string; keywords: string[];
+  sourceRange: { from: string; to: string };
+  timeRange: { start: number; end: number };
   relevance: number;
+  directoryContext?: DirectoryContext;
+}
+export interface OpenSourceResult {
+  messages: Message[];
+  directoryContext: DirectoryContext | null;
 }
 
 export interface SearchResult {
@@ -213,10 +214,14 @@ export class HistoryRetriever {
   /**
    * Open the original source messages for a context chunk.
    */
-  async openSource(contextId: string): Promise<Message[] | null> {
+  async openSource(contextId: string): Promise<OpenSourceResult | null> {
     const chunk = await this.store.getChunk(contextId);
     if (!chunk) return null;
-    return this.store.getMessageRange(chunk.sourceFromId, chunk.sourceToId);
+    const messages = await this.store.getMessageRange(chunk.sourceFromId, chunk.sourceToId);
+    let directoryContext: DirectoryContext | null = null;
+    if (chunk.directoryId) { const dir = await this.store.getDirectory(chunk.directoryId);
+      if (dir) directoryContext = { directoryId:dir.id, generation:dir.generation, overallContent:dir.overallContent, progress:dir.progress, mainConclusions:dir.mainConclusions, importantChanges:dir.importantChanges }; }
+    return { messages, directoryContext };
   }
 
   /**

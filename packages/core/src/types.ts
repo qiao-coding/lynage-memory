@@ -120,6 +120,8 @@ export interface Scope {
   limit?: number;
   beforeId?: string;
   afterId?: string;
+  /** Only return messages created after this timestamp (prevents re-archiving) */
+  since?: number;
 }
 
 /** Token budget tracking */
@@ -134,19 +136,16 @@ export interface TokenBudget {
 // ---------------------------------------------------------------------------
 
 export interface LynageConfig {
-  /** Token threshold for triggering archive (default 16_000) */
+  /** Token threshold for triggering archive (default 8_000) */
   archiveThreshold: number;
-  /** Tokens to retain in recent context after archive (default 6_000) */
+  /** Tokens to retain in recent context after archive (default 4_000) */
   retainTokens: number;
   /** Max children per directory before generation compaction (default 20) */
   directoryCapacity: number;
-  /** Number of turns to overlap across archive boundaries (default 3) */
-  overlapTurns: number;
 }
 
 export const DEFAULT_CONFIG: LynageConfig = {
-  archiveThreshold: 16_000,
-  retainTokens: 6_000,
+  archiveThreshold: 8_000,
+  retainTokens: 4_000,
   directoryCapacity: 20,
-  overlapTurns: 3,
 };

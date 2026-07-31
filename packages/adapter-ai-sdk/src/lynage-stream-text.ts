@@ -47,13 +47,22 @@ function createLynageTools(memory: LynageMemory, threadId: string) {
       contextId: z.string().describe("Context chunk ID from search results"),
     }),
     execute: async ({ contextId }) => {
-      const messages = await memory.openSource(contextId);
-      if (!messages || messages.length === 0) {
+      const result = await memory.openSource(contextId);
+      if (!result || result.messages.length === 0) {
         return "No messages found for this context ID.";
       }
-      return messages
+      const parts: string[] = [];
+      if (result.directoryContext) {
+        parts.push(
+          `## Phase Context\n${result.directoryContext.overallContent}\n` +
+          (result.directoryContext.mainConclusions.length > 0
+            ? `Conclusions: ${result.directoryContext.mainConclusions.join("; ")}\n` : "")
+        );
+      }
+      parts.push(result.messages
         .map((m) => `[${m.role.toUpperCase()}] ${m.content}`)
-        .join("\n\n");
+        .join("\n\n"));
+      return parts.join("\n");
     },
   });
 
@@ -151,13 +160,14 @@ export async function lynageStreamText(options: LynageStreamTextOptions) {
     result: unknown;
   }> = [];
   let responseText = "";
+  let collectedText = "";
 
-  // 2. Stream the model response (with error handling to prevent orphaned turns)
+  // 2. Stream the model response with compiled context (working memory + history)
   let result;
   try {
     result = streamText({
       model,
-      prompt,
+      messages: turn.messages as unknown as any[],
       tools: allTools as Record<string, CoreTool>,
       system,
       onFinish: (event) => {
@@ -177,15 +187,23 @@ export async function lynageStreamText(options: LynageStreamTextOptions) {
       },
     });
 
-    // 3. Wait for stream completion
-    const final = await result;
-    const finalText = await final.text;
+    // 3. Collect full text from stream
+    collectedText = "";
+    for await (const chunk of result.textStream) {
+      collectedText += chunk;
+    }
+    const finishResult = await result;
+    const usage = await finishResult.usage;
 
-    // 4. Finish turn
+    // 4. Finish turn with collected text
     await turn.finish({
-      response: responseText || finalText || "(no text response)",
+      response: responseText || collectedText || "(no text response)",
       toolCalls: collectedCalls.length > 0 ? collectedCalls : undefined,
       toolResults: collectedResults.length > 0 ? collectedResults : undefined,
+      usage: usage ? {
+        promptTokens: usage.promptTokens ?? 0,
+        completionTokens: usage.completionTokens ?? 0,
+      } : undefined,
     });
   } catch (err) {
     // Ensure turn is always finished — even on model failure.
@@ -197,7 +215,9 @@ export async function lynageStreamText(options: LynageStreamTextOptions) {
     throw err;
   }
 
-  return result!;
+  // Return collected text (stream already consumed internally)
+  const finalText = responseText || collectedText || "";
+  return { text: finalText };
 }
 
 // ---- Helpers ----

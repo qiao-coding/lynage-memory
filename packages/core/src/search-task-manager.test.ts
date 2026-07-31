@@ -39,6 +39,7 @@ class MockStore implements LynageStore {
   async getMessageCount() { return 0; }
   async createChunk() { return {} as ContextChunk; }
   async getChunk() { return null; }
+  async getChunksByIds() { return []; }
   async getChunksByDirectory() { return []; }
   async listChunks() { return []; }
   async updateChunkDirectory() {}
@@ -46,6 +47,7 @@ class MockStore implements LynageStore {
   async updateDirectory() { return {} as DirectoryNode; }
   async getChildDirectories() { return []; }
   async addChildToDirectory() {}
+  async removeChildFromDirectory() {}
   async getWorkingMemory() { return null; }
   async upsertWorkingMemory() { return {} as WorkingMemory; }
   async getUserMemory() { return null; }

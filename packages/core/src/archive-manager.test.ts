@@ -36,6 +36,7 @@ class MockStore implements LynageStore {
     this.chunks.set(chunk.id, chunk); return chunk;
   }
   async getChunk(id: string) { return this.chunks.get(id) ?? null; }
+  async getChunksByIds(ids: string[]) { return ids.map(id => this.chunks.get(id)).filter(Boolean) as any; }
   async getChunksByDirectory() { return []; }
   async listChunks() { return Array.from(this.chunks.values()); }
   async updateChunkDirectory(chunkId: string, dirId: string) {
@@ -54,6 +55,10 @@ class MockStore implements LynageStore {
   async getChildDirectories() { return []; }
   async addChildToDirectory(child: DirectoryChild) {
     const list = this.children.get(child.directoryId) ?? []; list.push(child); this.children.set(child.directoryId, list);
+  }
+  async removeChildFromDirectory(dirId: string, childId: string) {
+    const list = this.children.get(dirId);
+    if (list) this.children.set(dirId, list.filter((c: DirectoryChild) => c.childId !== childId));
   }
   async getDirectoryChildren(dirId: string) { return this.children.get(dirId) ?? []; }
   async getWorkingMemory() { return null; }

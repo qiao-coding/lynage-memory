@@ -5,12 +5,17 @@
   "type": "module",
   "scripts": {
     "bench": "tsx compare.ts",
+    "bench-real": "tsx bench-real.ts",
     "simulate": "tsx simulate.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^1.3.0",
+    "@lynage/ai-sdk": "workspace:*",
     "@lynage/core": "workspace:*",
     "@lynage/storage-sqlite": "workspace:*",
-    "better-sqlite3": "^11.7.0"
+    "ai": "^4.3.0",
+    "better-sqlite3": "^11.7.0",
+    "hermes-memory-engine": "^0.1.0"
   },
   "devDependencies": {
     "tsx": "^4.19.0"

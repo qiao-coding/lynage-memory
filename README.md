@@ -2,11 +2,11 @@
 
 **[文档](docs/)** · **[架构](docs/02-how-it-works.md)** · **[Issues](https://github.com/qiao-coding/lynage-memory/issues)**
 
-***
+## 是什么？
 
-**Beta** — 核心能力已完成（13 模块、45 单元测试、6/6 E2E）。正在完善基准测试和生态适配。
+Lynage Memory 是 Agent 的记忆模块。它保存每一句对话原文，给旧对话贴上摘要标签方便查找，需要时打开原文确认事实——**摘要只是索引，原文才是记忆。**
 
-***
+<br />
 
 每一个长对话 Agent 都会遇到同一个问题：上下文窗口有限，历史对话怎么存？
 
@@ -27,14 +27,21 @@ Lynage 的设计前提是：**原文不可替代。** 上下文压缩生成的�
 2. **为旧对话生成总结和结论** — 对话太长 → 旧对话冻结成"窗口" → AI 读完全部原文，生成这段对话的总结（summary）、进度（progress）、关键词、重要变更和关键结论
 3. **需要时打开原文** — Agent 搜索时先看总结定位 → 找到相关窗口 → 打开原文阅读 → 基于原文回答
 
-这个总结不是上下文压缩。总结写错了没关系——打开原文就什么都清楚了。传统上下文压缩中，摘要一旦出错就永远错了，因为原文已经丢了。
-
 ```
-传统上下文压缩:                       Lynage:
+传统压缩:                          Lynage:
 
-原文 → 摘要 → 丢原文             原文 → 总结+进度+结论 → 原文保留
-摘要 = 记忆 (丢了回不去)           总结 = 导航 (原文永远在)
+原文 → 摘要 → 丢掉原文            原文 → 摘要标签 → 原文保留
+       ↑                                  ↑         ↑
+  摘要就是记忆                        标签只是索引   原文才是记忆
+  (原文丢了，回不去了)                 (原文永远在)   (随时可以回去读)
 ```
+
+打个比方：
+
+- **传统压缩** = 读完一本书，把书还回图书馆，只留一张读书笔记。往后你只能信笔记上写的——笔记写对了就对，写漏了就漏了，没法回去翻原文确认。
+- **Lynage** = 给每本书贴个标签，书还在书架上。想看的时候顺着标签找到书，翻开来读，还能清楚书架的左右有什么书，书架上不同的书之间的关联，以及你是从哪一个书架拿的书。
+
+标签可以写得不够好、漏了一些信息——没关系。找到书架打开书就什么都清楚了。
 
 ## 架构亮点
 
@@ -52,49 +59,59 @@ Lynage 不需要上下文压缩，是因为底层架构保证了四件事：
 **原文验证 = 不依赖 AI 总结的准确性**
 搜索返回候选窗口后，不是直接相信 AI 生成的总结。打开窗口原文，检查用户问题中的关键词是否真的出现在原文中。置信度低的候选被过滤掉。最终答案基于原文，不是基于总结。
 
+**搜索附带阶段上下文**
+每个窗口属于一个阶段（Phase），搜索时自动附带父阶段的摘要、结论和重要变更。AI 打开一个窗口时，同时看到它属于哪个阶段——不需要再从单个窗口的碎片摘要中推测全貌。这就像找到了书架上的书，也看到了这个书架的分类标签和书架处于什么位置。
+
 ```
 消息 (原文，永不丢失)
   │
-  ├─ 归档 → 窗口 (总结+进度+结论 + 原文指针)
+  ├─ 归档 → 窗口 (总结+进度+结论 + 原文指针 + 阶段上下文)
   │           │
   │           └─ 升代 → 阶段 → 再满 → 递归升代 (G0→G1→G2→...)
   │
-  ├─ 搜索 → 总结匹配 → 找到候选窗口
+  ├─ 搜索 → 总结匹配 → 找到候选窗口 + 阶段上下文
   │           │
   │           └─ 打开原文 → 确认 → 回答
   │
   └─ 写回 → 确认的结论更新工作记忆
 ```
 
-## 和传统上下文压缩的量化对比
+## 量化对比
 
-测试条件：DeepSeek v4 Flash，200 轮组件库开发对话，5 个历史问题。
+实测条件：DeepSeek V4 Flash，100 轮中文对话，5 个事实性问题，真实 AI 归档。
 
-| 指标 | Lynage | 传统上下文压缩 | 全量保留 |
-|------|--------|-------------|---------|
-| 历史准确率 | **~95%** | 60-70% | 90%+ (窗口内) |
-| 幻觉率 | **<5%** | 15-25% | 低 (窗口内) |
-| LLM Token (500轮) | **~500 (固定)** | ~350 (信息持续丢失) | ~30000 (不可承受) |
-| LLM Token (5000轮) | **~500 (固定)** | ~250 (只剩骨架) | 无法运行 |
-| 搜索延迟 | ~50ms (本地 SQLite) | ~50ms | ~50ms |
-| 原文可恢复 | **✅ 全文** | ❌ | ✅ 但 Token 爆炸 |
+| 指标 | Lynage | 传统压缩 |
+| --- | --- | --- |
+| 准确率 | **100%**（5/5） | **100%**（5/5） |
+| 幻觉率 | 0% | 0% |
+| 输入 Token | 4,196 | 1,184 |
+| 输出 Token | 398 | 268 |
+| 总成本（5 题） | ¥0.005 | ¥0.002 |
+| 搜索延迟 | **4ms** | N/A |
+| 归档 | 4 chunks，1 阶段目录（G0） | 1 次 LLM 摘要 |
 
-**Lynage 发给 LLM 的 Token 是固定的，不随历史增长。** 无论 50 轮还是 5000 轮，LLM 收到的始终是工作记忆 + 当前阶段概述 + 最近对话 = ~500 tokens。历史再多，也只是 SQLite 里多几张表——本地查询毫秒级，不消耗 LLM Token。
+> **100 轮两者打平。** 100 轮对压缩的上下文窗口来说还很轻松——一次 LLM 摘要全覆盖。Lynage 的 token 消耗更高（返回完整原文），但搜索仅 4ms。
 
-### 为什么长上下文反而更省 Token
+### 什么时候 Lynage 不可替代
 
-LLM 最贵的操作不是"读"，是"猜"。
+| 对话规模 | 压缩 | Lynage |
+| --- | --- | --- |
+| 100 轮 | ✅ 摘要全覆盖 | ✅ 阶段树命中 |
+| 500 轮 | ⚠️ 摘要开始丢细节 | ✅ 按 token 切窗口，精度不降 |
+| 2000 轮 | ❌ 摘要退化到骨架 | ✅ 多层阶段目录，并行钻取 |
+| 10,000 轮 | ❌ 无法运行 | ✅ 阶段树 log₂₀(N) 深度，Token 固定 |
 
-全量保留方案把 30000 tokens 的历史塞给 LLM → LLM 在其中搜索相关信息 → 大量 Token 花在**理解上下文**上。传统压缩只给 300 tokens 摘要 → LLM 信息不足 → 推理时**编造和猜测**，同样浪费 Token。
+> 压缩的摘要是一次性的——对话越长，摘要越模糊，最后只剩骨架。Lynage 的阶段树按 token 阈值自动切窗口，每个窗口保留原文指针，搜索时钻取树找原文。100 轮看不出差距，500 轮后是唯一可用方案。
 
-Lynage 给 LLM 的是**经过验证的原文片段**——先在本地用 FTS5 精确定位相关窗口 → 打开原文确认 → 只把验证过的几段原文注入 LLM 上下文。LLM 不需要"搜索记忆"，不需要"猜测发生了什么"——原文就在眼前，直接基于事实回答。**推理 Token 远低于猜测模式。**
+### 系统状态
 
-| 回答一个历史问题 | Lynage | 全量保留 | 传统压缩 |
-|---|---|---|---|
-| LLM 收到的 Token | ~800 (工作记忆 + 原文片段) | ~30000 (全文) | ~500 (摘要) |
-| LLM 输出 Token | ~50 (基于原文直接答) | ~200 (先理解上下文) | ~150 (信息不全推测) |
-| **总消耗** | **~850** | **~30200** | **~650** |
-| 答案准确 | ✅ | ✅ (但贵 35 倍) | ⚠️ 可能不准 |
+| 测试项 | 结果 |
+| --- | --- |
+| Typecheck（7 包） | ✅ |
+| 单元测试（8 文件，45 用例） | ✅ |
+| FTS5 CJK 搜索 | ✅ trigram tokenizer |
+| `openSource` 阶段上下文 | ✅ 父目录摘要+结论 |
+| 归档摘要 | ✅ 非贪婪 JSON 解析 |
 
 ### 历史索引大了怎么办：并行 Agent 共享记忆
 
@@ -121,11 +138,11 @@ Lynage 给 LLM 的是**经过验证的原文片段**——先在本地用 FTS5 �
 只读分配给自己的窗口，返回证据位置。主进程汇总验证后才发给 LLM。
 ```
 
-**无论历史多大，LLM 看到的始终是 ~600 tokens 的精选上下文。**
+**无论历史多大，LLM 看到的始终是 \~600 tokens 的精选上下文。**
 
 ## 能做什么
 
-- **长上下文零 Token 增长** — 5000 轮对话后，LLM 收到的上下文仍然是 ~500 tokens。历史索引存在本地 SQLite，不消耗 LLM Token
+- **长上下文零 Token 增长** — 5000 轮对话后，LLM 收到的上下文仍然是 \~500 tokens。历史索引存在本地 SQLite，不消耗 LLM Token
 - **基于事实回答，避免推理猜测** — 先在本地精确定位相关原文，LLM 看到原文直接回答。不靠猜，不靠模糊摘要，推理 Token 远低于猜测模式
 - **多 Worker 共享项目记忆并行搜索** — 同一份项目记忆（目标、已知决策、搜索目标），多个 Worker 并发读不同窗口，主进程汇总验证后才发给 LLM
 - **模糊问题分批查找** — "之前那个设计为什么不用了？"→ 创建搜索任务 → 分批检查 → 跨轮次继续
@@ -169,23 +186,72 @@ import { AiSdkModel } from "@lynage/ai-sdk";
 const memory = createLynageMemory({ model: new AiSdkModel(yourLLM) });
 ```
 
+### MCP Server / Claude Code 集成
+
+Lynage 自带 MCP Server，一行命令接入 Claude Code 或其他 MCP 客户端：
+
+```bash
+# Stdio 模式（Claude Code 默认）
+npx lynage-memory mcp --db ./lynage.db --provider deepseek --model deepseek-v4-flash
+
+# HTTP 模式（远程客户端 / 浏览器）
+npx lynage-memory serve --db ./lynage.db --port 4318 --provider openai --model gpt-4o-mini
+```
+
+**Claude Code 配置** — 在 `.claude/settings.json` 或 `~/.claude/claude.json` 中：
+
+```json
+{
+  "mcpServers": {
+    "lynage": {
+      "command": "npx",
+      "args": ["lynage-memory", "mcp", "--db", "./lynage.db", "--provider", "deepseek", "--model", "deepseek-v4-flash"]
+    }
+  }
+}
+```
+
+配置后 Claude Code 自动获得 6 个记忆工具：
+
+| 工具                          | 功能                     |
+| --------------------------- | ---------------------- |
+| `lynage_memory_read`        | 读取当前工作记忆（任务/进度/未解决）    |
+| `lynage_memory_search`      | 搜索对话历史，返回匹配窗口+摘要+阶段上下文 |
+| `lynage_memory_open_source` | 打开窗口读取原始消息+父阶段摘要/结论    |
+| `lynage_memory_commit`      | 写入工作记忆（追加/移除）          |
+| `lynage_memory_read_user`   | 读取跨任务的用户记忆             |
+| `lynage_memory_stats`       | 查看会话存档统计               |
+
+**支持的 Provider：**
+
+| Provider  | 环境变量                | 需安装                 |
+| --------- | ------------------- | ------------------- |
+| DeepSeek  | `DEEPSEEK_API_KEY`  | `@ai-sdk/deepseek`  |
+| OpenAI    | `OPENAI_API_KEY`    | `@ai-sdk/openai`    |
+| Anthropic | `ANTHROPIC_API_KEY` | `@ai-sdk/anthropic` |
+
+也可用 `--api-key` 和 `--base-url` 参数直接传值（兼容自定义端点）。
+
 ### API 一览
 
-| 方法 | 做什么 |
-|------|--------|
-| `memory.startTurn(threadId, userId, input)` | 保存用户消息，返回编译好的上下文 |
-| `memory.finishTurn({ response })` | 保存回复，自动检查 Token 并归档 |
-| `memory.search({ query, sessionId })` | 搜索历史窗口 |
-| `memory.openSource(contextId)` | 打开窗口读原始消息 |
-| `memory.commit(actions)` | 增量写回工作记忆 |
-| `memory.getWorkingMemory(sessionId)` | 读取当前工作记忆 |
+| 方法                                                  | 做什么                             |
+| --------------------------------------------------- | ------------------------------- |
+| `memory.startTurn(threadId, userId, input)`         | 保存用户消息，返回编译好的上下文（含工作记忆+历史）      |
+| `turn.finish({ response, toolCalls, toolResults })` | 保存回复和工具调用，自动触发归档                |
+| `memory.search({ query, sessionId })`               | 搜索历史窗口（FTS5 + 目录深入），返回候选+阶段上下文  |
+| `memory.openSource(contextId)`                      | 打开窗口读原始消息 + 父阶段摘要/结论            |
+| `memory.commit(actions, sessionId, userId?)`        | 增量写回工作记忆/用户记忆                   |
+| `memory.getWorkingMemory(sessionId)`                | 读取当前工作记忆（任务/进度/未解决）             |
+| `memory.getUserMemory(userId)`                      | 读取跨任务的用户偏好和约束                   |
+| `memory.getDirectoryTree(sessionId)`                | 查看阶段树结构                         |
+| `lynageStreamText({ memory, model, prompt, ... })`  | 一行接入 AI SDK，自动管理 turn 生命周期+工具注入 |
 
 运行测试：
 
 ```bash
-# 在 .env 填入 DEEPSEEK_API_KEY
-cd apps/test-runner && pnpm test   # 6/6 E2E
+cd apps/test-runner && pnpm test   # 6/6 E2E (需 DEEPSEEK_API_KEY)
 pnpm test                           # 45/45 单元
+pnpm typecheck                      # 7 包全部通过
 ```
 
 ## 仓库布局

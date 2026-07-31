@@ -64,10 +64,14 @@ ${content}`;
         system: this.systemPrompt,
         prompt: prompt + '\n\nReturn ONLY a JSON object with fields: {"summary": "...", "progress": "...", "keywords": [...]}',
       });
-      const jsonMatch = text.text.match(/\{[\s\S]*\}/);
+      const jsonMatch = text.text.match(/\{[\s\S]*?\}/); // non-greedy, first JSON object only
       if (jsonMatch) {
-        const parsed = ChunkSummarySchema.parse(JSON.parse(jsonMatch[0]));
-        return parsed;
+        try {
+          const parsed = ChunkSummarySchema.parse(JSON.parse(jsonMatch[0]));
+          return parsed;
+        } catch {
+          // JSON parse or schema validation failed, use raw text
+        }
       }
       return { summary: text.text.slice(0, 200), progress: "Unknown", keywords: [] };
     }
@@ -113,9 +117,13 @@ Produce:
         model: this.model,
         prompt: prompt + '\n\nReturn ONLY JSON: {"overallContent":"...","progress":"...","mainConclusions":[...],"importantChanges":[...]}',
       });
-      const jsonMatch = text.text.match(/\{[\s\S]*\}/);
+      const jsonMatch = text.text.match(/\{[\s\S]*?\}/);
       if (jsonMatch) {
-        return DirectorySummarySchema.parse(JSON.parse(jsonMatch[0]));
+        try {
+          return DirectorySummarySchema.parse(JSON.parse(jsonMatch[0]));
+        } catch {
+          // parse failed, use raw text
+        }
       }
       return { overallContent: text.text.slice(0, 200), progress: "Unknown", mainConclusions: [], importantChanges: [] };
     }

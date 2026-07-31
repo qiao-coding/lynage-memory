@@ -7,28 +7,29 @@ import Database from "better-sqlite3";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema.js";
 
-let dbInstance: BetterSQLite3Database<typeof schema> | null = null;
-let rawDb: Database.Database | null = null;
+const dbCache = new Map<string, { db: BetterSQLite3Database<typeof schema>; raw: Database.Database }>();
 
 /**
  * Create or open a Lynage SQLite database.
  * Enables WAL mode. Call ensureTables() after to create tables + FTS.
+ * Caches by dbPath — calling twice with the same path returns the same instance.
  */
 export function createDatabase(
   dbPath: string,
 ): { db: BetterSQLite3Database<typeof schema>; raw: Database.Database } {
-  if (dbInstance && rawDb) {
-    return { db: dbInstance, raw: rawDb };
-  }
+  const cached = dbCache.get(dbPath);
+  if (cached) return cached;
 
-  rawDb = new Database(dbPath);
+  const rawDb = new Database(dbPath);
   rawDb.pragma("journal_mode = WAL");
   rawDb.pragma("busy_timeout = 5000");
   rawDb.pragma("foreign_keys = ON");
 
-  dbInstance = drizzle(rawDb, { schema });
+  const db = drizzle(rawDb, { schema });
+  const result = { db, raw: rawDb };
+  dbCache.set(dbPath, result);
 
-  return { db: dbInstance, raw: rawDb };
+  return result;
 }
 
 /**
@@ -121,6 +122,15 @@ export function ensureTables(raw: Database.Database): void {
     );
   `);
 
+  // Indexes for hot query columns
+  raw.exec(`
+    CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_chunks_session ON context_chunks(session_id);
+    CREATE INDEX IF NOT EXISTS idx_chunks_directory ON context_chunks(directory_id);
+    CREATE INDEX IF NOT EXISTS idx_dir_children_dir ON directory_children(directory_id);
+    CREATE INDEX IF NOT EXISTS idx_directories_session ON directories(session_id);
+  `);
+
   // FTS5: full-text search on messages.content
   setupFts(raw);
 }
@@ -129,10 +139,14 @@ export function ensureTables(raw: Database.Database): void {
  * Create FTS5 virtual table and sync triggers.
  */
 function setupFts(raw: Database.Database): void {
+  // Use trigram tokenizer for CJK + Latin support.
+  // unicode61 tokenizer does not index CJK on some SQLite builds (Windows).
+  // trigram splits into overlapping 3-char sequences, working for all languages.
   raw.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
       content,
-      content_rowid='rowid'
+      content_rowid='rowid',
+      tokenize='trigram'
     );
   `);
 
@@ -160,12 +174,19 @@ function setupFts(raw: Database.Database): void {
 }
 
 /**
- * Close the database connection.
+ * Close all database connections.
  */
-export function closeDatabase(): void {
-  if (rawDb) {
-    rawDb.close();
-    rawDb = null;
-    dbInstance = null;
+export function closeDatabase(dbPath?: string): void {
+  if (dbPath) {
+    const cached = dbCache.get(dbPath);
+    if (cached) {
+      cached.raw.close();
+      dbCache.delete(dbPath);
+    }
+  } else {
+    for (const [, entry] of dbCache) {
+      entry.raw.close();
+    }
+    dbCache.clear();
   }
 }

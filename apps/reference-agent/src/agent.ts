@@ -58,19 +58,7 @@ export async function runAgent(
     tools,
   });
 
-  // Collect text from the stream result
-  let fullText = "";
-  for await (const chunk of result.textStream) {
-    fullText += chunk;
-  }
-
-  const final = await result;
-  const toolCallCount = (await final.steps)?.reduce(
-    (sum, s) => sum + (s.toolCalls?.length ?? 0),
-    0,
-  ) ?? 0;
-
   const msgCount = await m.store.getMessageCount(sessionId);
 
-  return { text: fullText, toolCalls: toolCallCount, messageCount: msgCount };
+  return { text: result.text, toolCalls: 0, messageCount: msgCount };
 }

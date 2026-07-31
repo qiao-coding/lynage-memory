@@ -2,7 +2,7 @@
 // SqliteStore — LynageStore implementation backed by SQLite + Drizzle ORM
 // ---------------------------------------------------------------------------
 
-import { eq, and, gte, lte, desc, asc, count, isNull } from "drizzle-orm";
+import { eq, and, gte, lte, gt, desc, asc, count, isNull, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type Database from "better-sqlite3";
@@ -74,35 +74,35 @@ export class SqliteStore implements LynageStore {
 
   async getRecent(scope: Scope): Promise<Message[]> {
     const limit = scope.limit ?? 100;
-    const query = this.db
+    const conditions: any[] = [eq(schema.messages.sessionId, scope.sessionId)];
+    if (scope.since) {
+      conditions.push(gt(schema.messages.createdAt, scope.since));
+    }
+
+    const rows = await this.db
       .select()
       .from(schema.messages)
-      .where(eq(schema.messages.sessionId, scope.sessionId))
+      .where(and(...conditions))
       .orderBy(desc(schema.messages.createdAt))
       .limit(limit);
 
-    const rows = await query;
     // Re-sort chronologically for consumption
     return rows.reverse().map((r) => this.toMessage(r));
   }
 
   async getMessageRange(fromId: string, toId: string): Promise<Message[]> {
-    const fromMsg = await this.getMessage(fromId);
-    const toMsg = await this.getMessage(toId);
-    if (!fromMsg || !toMsg) return [];
-
-    const rows = await this.db
-      .select()
-      .from(schema.messages)
-      .where(
-        and(
-          eq(schema.messages.sessionId, fromMsg.sessionId),
-          gte(schema.messages.createdAt, fromMsg.createdAt),
-          lte(schema.messages.createdAt, toMsg.createdAt),
-        ),
+    // Use rowid range (monotonic, no timestamp collisions)
+    const stmt = this.raw.prepare(`
+      SELECT * FROM messages
+      WHERE session_id = (
+        SELECT session_id FROM messages WHERE id = ? LIMIT 1
       )
-      .orderBy(asc(schema.messages.createdAt));
-
+      AND rowid BETWEEN
+        (SELECT rowid FROM messages WHERE id = ? LIMIT 1)
+        AND (SELECT rowid FROM messages WHERE id = ? LIMIT 1)
+      ORDER BY created_at ASC
+    `);
+    const rows = stmt.all(fromId, fromId, toId) as Array<typeof schema.messages.$inferSelect>;
     return rows.map((r) => this.toMessage(r));
   }
 
@@ -160,6 +160,15 @@ export class SqliteStore implements LynageStore {
       .where(eq(schema.contextChunks.id, id))
       .limit(1);
     return rows[0] ? this.toChunk(rows[0]) : null;
+  }
+
+  async getChunksByIds(ids: string[]): Promise<ContextChunk[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db
+      .select()
+      .from(schema.contextChunks)
+      .where(inArray(schema.contextChunks.id, ids));
+    return rows.map((r) => this.toChunk(r));
   }
 
   async getChunksByDirectory(directoryId: string): Promise<ContextChunk[]> {
@@ -275,6 +284,12 @@ export class SqliteStore implements LynageStore {
       childId: child.childId,
       sortOrder: child.sortOrder,
     });
+  }
+
+  async removeChildFromDirectory(directoryId: string, childId: string): Promise<void> {
+    this.raw.prepare(
+      "DELETE FROM directory_children WHERE directory_id = ? AND child_id = ?",
+    ).run(directoryId, childId);
   }
 
   async getDirectoryChildren(directoryId: string): Promise<DirectoryChild[]> {
@@ -444,27 +459,42 @@ export class SqliteStore implements LynageStore {
     query: string,
     sessionId?: string,
   ): Promise<Message[]> {
-    // Use FTS5 to find matching message rowids
-    const stmt = this.raw.prepare(`
-      SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?
-    `);
-    const ftsRows = stmt.all(query) as Array<{ rowid: number }>;
-    const rowids = ftsRows.map((r) => r.rowid);
+    // Sanitize FTS5 query: strip special characters that break FTS5 syntax
+    const sanitized = query.replace(/[^\w\s一-鿿぀-ゟ゠-ヿ]/g, " ").replace(/\s+/g, " ").trim();
+    if (!sanitized) return [];
 
-    if (rowids.length === 0) return [];
+    // Use FTS5 trigram search. For very short queries (< 3 chars), trigram
+    // can't form proper n-grams — fall back to SQL LIKE.
+    const queryTerms = sanitized.split(/\s+/).filter((t) => t.length > 0);
+    const needLikeFallback = queryTerms.some((t) => t.length < 3);
 
-    // Fetch actual messages by rowid
-    let dbQuery = this.db
-      .select()
-      .from(schema.messages);
+    let rawRows: Array<typeof schema.messages.$inferSelect>;
 
-    // SQLite rowid lookup
-    const placeholders = rowids.map(() => "?").join(",");
-    const rawRows = this.raw
-      .prepare(
-        `SELECT * FROM messages WHERE rowid IN (${placeholders})${sessionId ? " AND session_id = ?" : ""} ORDER BY created_at ASC`,
-      )
-      .all(...rowids, ...(sessionId ? [sessionId] : [])) as Array<typeof schema.messages.$inferSelect>;
+    if (needLikeFallback) {
+      // LIKE fallback for short queries (< 3 chars): return messages directly
+      const conditions = queryTerms.map(() => "content LIKE ?").join(" AND ");
+      const params = queryTerms.map((t) => `%${t}%`);
+      const sql = `SELECT * FROM messages WHERE ${conditions}${sessionId ? " AND session_id = ?" : ""} ORDER BY created_at ASC`;
+      rawRows = this.raw.prepare(sql).all(
+        ...params,
+        ...(sessionId ? [sessionId] : []),
+      ) as Array<typeof schema.messages.$inferSelect>;
+    } else {
+      // FTS5 trigram search: get rowids then fetch full messages
+      const stmt = this.raw.prepare(
+        `SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?`,
+      );
+      const ftsRows = stmt.all(sanitized) as Array<{ rowid: number }>;
+      const rowids = [...new Set(ftsRows.map((r) => r.rowid))].slice(0, 999);
+      if (rowids.length === 0) return [];
+
+      const placeholders = rowids.map(() => "?").join(",");
+      rawRows = this.raw
+        .prepare(
+          `SELECT * FROM messages WHERE rowid IN (${placeholders})${sessionId ? " AND session_id = ?" : ""} ORDER BY created_at ASC`,
+        )
+        .all(...rowids, ...(sessionId ? [sessionId] : [])) as Array<typeof schema.messages.$inferSelect>;
+    }
 
     return rawRows.map((r) => this.toMessage(r));
   }
@@ -476,16 +506,18 @@ export class SqliteStore implements LynageStore {
   private toMessage(
     r: typeof schema.messages.$inferSelect,
   ): Message {
+    // Raw SQL queries return snake_case, Drizzle returns camelCase. Handle both.
+    const raw = r as Record<string, unknown>;
     return {
-      id: r.id,
-      sessionId: r.sessionId,
-      userId: r.userId ?? undefined,
-      role: r.role as Message["role"],
-      content: r.content,
-      toolCallId: r.toolCallId ?? undefined,
-      toolName: r.toolName ?? undefined,
-      tokenCount: r.tokenCount ?? undefined,
-      createdAt: r.createdAt,
+      id: (raw.id ?? raw.ID) as string,
+      sessionId: (raw.sessionId ?? raw.session_id) as string,
+      userId: (raw.userId ?? raw.user_id ?? undefined) as string | undefined,
+      role: (raw.role ?? raw.ROLE) as Message["role"],
+      content: (raw.content ?? raw.CONTENT) as string,
+      toolCallId: (raw.toolCallId ?? raw.tool_call_id ?? undefined) as string | undefined,
+      toolName: (raw.toolName ?? raw.tool_name ?? undefined) as string | undefined,
+      tokenCount: (raw.tokenCount ?? raw.token_count ?? undefined) as number | undefined,
+      createdAt: (raw.createdAt ?? raw.created_at ?? 0) as number,
     };
   }
 

@@ -15,7 +15,7 @@ import type { Message } from "./types.js";
 import type { LynageStore } from "./store.js";
 import type { LynageModel } from "./model.js";
 import { findNaturalBoundary } from "./boundary-detector.js";
-import { estimateMessagesTokenCount } from "./token-counter.js";
+import { estimateMessagesTokenCount, estimateTokenCount } from "./token-counter.js";
 import { GenerationCompactor } from "./generation-compactor.js";
 
 export interface ArchiveConfig {
@@ -52,8 +52,17 @@ export class ArchiveManager {
    * Check if recent context exceeds the threshold, and archive if so.
    */
   async checkAndArchive(sessionId: string): Promise<ArchiveResult> {
-    // 1. Get all recent messages
-    const recent = await this.store.getRecent({ sessionId });
+    // 0. Find the last archived timestamp to avoid re-archiving
+    const existingChunks = await this.store.listChunks(sessionId);
+    const lastArchiveTime = existingChunks.length > 0
+      ? Math.max(...existingChunks.map((c) => c.timeRangeEnd))
+      : 0;
+
+    // 1. Get only messages newer than the last archive
+    const recent = await this.store.getRecent({
+      sessionId,
+      since: lastArchiveTime,
+    });
 
     // 2. Compute token estimate
     const totalTokens = estimateMessagesTokenCount(recent);
@@ -134,8 +143,11 @@ export class ArchiveManager {
     // 11. Persist the chunk's directory association
     await this.store.updateChunkDirectory(chunk.id, g0Dir.id);
 
-    // 12. Check generational compaction (M5)
-    await this.compactor.checkAndCompact(g0Dir.id);
+    // 12. Check generational compaction for all root dirs (M5)
+    const allRootDirs = await this.store.getRootDirectories(sessionId);
+    for (const rootDir of allRootDirs) {
+      await this.compactor.checkAndCompact(rootDir.id);
+    }
 
     return {
       archived: true,
@@ -175,8 +187,8 @@ function findRetainIndex(messages: Message[], retainTokens: number): number {
   let tokens = 0;
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]!;
-    // Use recorded tokenCount if available, otherwise estimate from content length
-    tokens += msg.tokenCount ?? Math.ceil(msg.content.length / 4);
+    // Use recorded tokenCount if available, otherwise CJK-aware estimate
+    tokens += msg.tokenCount ?? estimateTokenCount(msg.content);
     if (tokens >= retainTokens) {
       return i;
     }

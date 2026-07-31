@@ -12,6 +12,7 @@
 
 import type { Message, WorkingMemory, DirectoryNode, ContextChunk, UserMemory } from "./types.js";
 import type { VerifiedCandidate } from "./source-verifier.js";
+import { estimateTokenCount } from "./token-counter.js";
 
 // ---- View type ----
 
@@ -83,7 +84,7 @@ function compileNormalChat(options: CompileOptions): CompiledContext {
     parts.push(formatWorkingMemory(options.workingMemory));
   }
 
-  return buildResult(parts, options.recentMessages);
+  return buildResult(parts, options.recentMessages, options.maxTokens);
 }
 
 function compileProjectWork(options: CompileOptions): CompiledContext {
@@ -113,7 +114,7 @@ function compileProjectWork(options: CompileOptions): CompiledContext {
     }
   }
 
-  return buildResult(parts, options.recentMessages);
+  return buildResult(parts, options.recentMessages, options.maxTokens);
 }
 
 function compileHistorySearch(options: CompileOptions): CompiledContext {
@@ -121,7 +122,7 @@ function compileHistorySearch(options: CompileOptions): CompiledContext {
 
   if (!options.verifiedCandidates || options.verifiedCandidates.length === 0) {
     parts.push("[No verified history results found.]");
-    return buildResult(parts, options.recentMessages);
+    return buildResult(parts, options.recentMessages, options.maxTokens);
   }
 
   parts.push(`# History Search Results (${options.verifiedCandidates.length} verified)\n`);
@@ -142,7 +143,7 @@ function compileHistorySearch(options: CompileOptions): CompiledContext {
 
   parts.push("> Use lynage_open_source with the contextId to read full original messages.");
 
-  return buildResult(parts, options.recentMessages);
+  return buildResult(parts, options.recentMessages, options.maxTokens);
 }
 
 function compileWorkerSearch(options: CompileOptions): CompiledContext {
@@ -162,7 +163,7 @@ function compileWorkerSearch(options: CompileOptions): CompiledContext {
     parts.push("# Worker Search\n[No snapshot assigned.]");
   }
 
-  return buildResult(parts, options.recentMessages);
+  return buildResult(parts, options.recentMessages, options.maxTokens);
 }
 
 function compileSourceVerification(options: CompileOptions): CompiledContext {
@@ -170,7 +171,7 @@ function compileSourceVerification(options: CompileOptions): CompiledContext {
 
   if (!options.verifiedCandidates || options.verifiedCandidates.length === 0) {
     parts.push("[No candidates to verify.]");
-    return buildResult(parts, options.recentMessages);
+    return buildResult(parts, options.recentMessages, options.maxTokens);
   }
 
   parts.push("# Source Verification\n");
@@ -190,7 +191,7 @@ function compileSourceVerification(options: CompileOptions): CompiledContext {
     );
   }
 
-  return buildResult(parts, options.recentMessages);
+  return buildResult(parts, options.recentMessages, options.maxTokens);
 }
 
 function compileArchiveIndexing(options: CompileOptions): CompiledContext {
@@ -204,7 +205,7 @@ function compileArchiveIndexing(options: CompileOptions): CompiledContext {
     "",
   );
 
-  return buildResult(parts, options.recentMessages);
+  return buildResult(parts, options.recentMessages, options.maxTokens);
 }
 
 // ---- Shared result builder ----
@@ -212,17 +213,36 @@ function compileArchiveIndexing(options: CompileOptions): CompiledContext {
 function buildResult(
   parts: string[],
   messages: Message[],
+  maxTokens?: number,
 ): CompiledContext {
   const systemPrompt = parts.join("\n");
+  const sysTokens = estimateTokenCount(systemPrompt);
 
-  const modelMessages = messages.map((m) => ({
+  let modelMessages = messages.map((m) => ({
     role: m.role,
     content: m.content,
   }));
 
+  // Apply maxTokens: drop oldest messages until under limit
+  if (maxTokens && maxTokens > 0) {
+    let total = sysTokens;
+    const kept: typeof modelMessages = [];
+    // Keep most recent messages first (iterate in reverse)
+    // Skip oversized messages but continue trying older (smaller) ones
+    for (let i = modelMessages.length - 1; i >= 0; i--) {
+      const msgTokens = estimateTokenCount(modelMessages[i]!.content);
+      if (total + msgTokens <= maxTokens) {
+        total += msgTokens;
+        kept.unshift(modelMessages[i]!);
+      }
+      // else: skip this message, try older ones that might fit
+    }
+    modelMessages = kept;
+  }
+
   const estimatedTokens =
-    Math.ceil(systemPrompt.length / 4) +
-    modelMessages.reduce((sum, m) => sum + Math.ceil(m.content.length / 4), 0);
+    sysTokens +
+    modelMessages.reduce((sum, m) => sum + estimateTokenCount(m.content), 0);
 
   return { systemPrompt, messages: modelMessages, estimatedTokens };
 }

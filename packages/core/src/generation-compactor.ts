@@ -127,15 +127,41 @@ export class GenerationCompactor {
       importantChanges: summary.importantChanges,
     });
 
-    // 4. Set the old directory's parent to the new parent
+    // 4. Move chunk children from old directory to new parent
+    //    This prevents the old dir from retaining all chunks and
+    //    filling up again immediately.
+    const oldChildren = await this.store.getDirectoryChildren(directoryId);
+    const chunkChildren = oldChildren.filter((c) => c.childType === "chunk");
+    if (chunkChildren.length > 0) {
+      // Update chunk directoryId to point to new parent
+      for (const cc of chunkChildren) {
+        await this.store.updateChunkDirectory(cc.childId, newParent.id);
+      }
+      // Move child entries to new parent
+      const newChildren = await this.store.getDirectoryChildren(newParent.id);
+      let sort = newChildren.length;
+      for (const cc of chunkChildren) {
+        await this.store.addChildToDirectory({
+          id: "", // Let store auto-generate UUID
+          directoryId: newParent.id,
+          childType: "chunk",
+          childId: cc.childId,
+          sortOrder: sort++,
+        });
+        // Remove stale entry from old directory
+        await this.store.removeChildFromDirectory(directoryId, cc.childId);
+      }
+    }
+
+    // 5. Set the old directory's parent to the new parent
     await this.store.updateDirectory(directoryId, {
       parentId: newParent.id,
     });
 
-    // 5. Add old directory as child of new parent
+    // 6. Add old directory as child of new parent
     const parentChildren = await this.store.getDirectoryChildren(newParent.id);
     await this.store.addChildToDirectory({
-      id: `dc-${Date.now()}`,
+      id: "", // Let store auto-generate UUID
       directoryId: newParent.id,
       childType: "directory",
       childId: directoryId,

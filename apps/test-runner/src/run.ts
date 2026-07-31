@@ -33,7 +33,7 @@ if (fs.existsSync(envPath)) {
 const API_KEY = process.env.DEEPSEEK_API_KEY;
 if (!API_KEY) { console.error("❌ DEEPSEEK_API_KEY not set. Fill it in .env first."); process.exit(1); }
 
-const MODEL_NAME = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const MODEL_NAME = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
 const BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1";
 
 // ---- Setup ----

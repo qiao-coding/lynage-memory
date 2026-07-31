@@ -21,6 +21,7 @@ class MockStore implements LynageStore {
     return Array.from(this.chunks.values()).filter(c => c.directoryId === dirId);
   }
   async getChunk(id: string) { return this.chunks.get(id) ?? null; }
+  async getChunksByIds(ids: string[]) { return ids.map(id => this.chunks.get(id)).filter(Boolean) as any; }
   async getMessageRange(fromId: string, toId: string) {
     const fromIdx = this.messages.findIndex(m => m.id === fromId);
     const toIdx = this.messages.findIndex(m => m.id === toId);
@@ -39,6 +40,7 @@ class MockStore implements LynageStore {
   async updateDirectory() { return {} as DirectoryNode; }
   async getChildDirectories() { return []; }
   async addChildToDirectory() {}
+  async removeChildFromDirectory() {}
   async getWorkingMemory() { return null; }
   async upsertWorkingMemory() { return {} as WorkingMemory; }
   async getUserMemory() { return null; }
