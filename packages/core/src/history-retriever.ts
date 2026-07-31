@@ -10,6 +10,7 @@
 
 import type { Message } from "./types.js";
 import type { LynageStore } from "./store.js";
+import { estimateTokenCount } from "./token-counter.js";
 
 // ---- Types ----
 
@@ -30,6 +31,10 @@ export interface SearchCandidate {
   timeRange: { start: number; end: number };
   relevance: number;
   directoryContext?: DirectoryContext;
+}
+export interface OpenSourceOptions {
+  /** Max total tokens for returned messages (default: unlimited) */
+  maxTokens?: number;
 }
 export interface OpenSourceResult {
   messages: Message[];
@@ -213,11 +218,22 @@ export class HistoryRetriever {
 
   /**
    * Open the original source messages for a context chunk.
+   * When maxTokens is set, keeps the most recent messages within budget.
    */
-  async openSource(contextId: string): Promise<OpenSourceResult | null> {
+  async openSource(contextId: string, options?: OpenSourceOptions): Promise<OpenSourceResult | null> {
     const chunk = await this.store.getChunk(contextId);
     if (!chunk) return null;
-    const messages = await this.store.getMessageRange(chunk.sourceFromId, chunk.sourceToId);
+    let messages = await this.store.getMessageRange(chunk.sourceFromId, chunk.sourceToId);
+    // Truncate to maxTokens budget (keep most recent — usually most relevant)
+    if (options?.maxTokens) {
+      let tokens = 0;
+      const kept: typeof messages = [];
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const t = messages[i]!.tokenCount ?? estimateTokenCount(messages[i]!.content);
+        if (tokens + t <= options.maxTokens) { tokens += t; kept.unshift(messages[i]!); }
+      }
+      messages = kept;
+    }
     let directoryContext: DirectoryContext | null = null;
     if (chunk.directoryId) { const dir = await this.store.getDirectory(chunk.directoryId);
       if (dir) directoryContext = { directoryId:dir.id, generation:dir.generation, overallContent:dir.overallContent, progress:dir.progress, mainConclusions:dir.mainConclusions, importantChanges:dir.importantChanges }; }
