@@ -106,6 +106,17 @@ export class SqliteStore implements LynageStore {
     return rows.map((r) => this.toMessage(r));
   }
 
+  async getMessagesAround(messageId: string, window = 3): Promise<Message[]> {
+    const anchor = this.raw.prepare(
+      "SELECT rowid, session_id FROM messages WHERE id = ? LIMIT 1",
+    ).get(messageId) as { rowid: number; session_id: string } | undefined;
+    if (!anchor) return [];
+    const rows = this.raw.prepare(
+      `SELECT * FROM messages WHERE session_id = ? AND rowid BETWEEN ? AND ? ORDER BY rowid ASC`,
+    ).all(anchor.session_id, anchor.rowid - window, anchor.rowid + window) as Array<typeof schema.messages.$inferSelect>;
+    return rows.map((r) => this.toMessage(r));
+  }
+
   async getMessageCount(sessionId: string): Promise<number> {
     const result = await this.db
       .select({ cnt: count() })

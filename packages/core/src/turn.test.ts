@@ -49,6 +49,7 @@ class MockStore implements LynageStore {
   // ---- Unused stubs ----
   async getMessage() { return null; }
   async getMessageRange() { return []; }
+  async getMessagesAround() { return []; }
   async getMessageCount() { return this.messages.length; }
   async createChunk() { return {} as never; }
   async getChunk() { return null; }

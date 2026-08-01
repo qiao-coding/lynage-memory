@@ -274,10 +274,10 @@ export class HistoryRetriever {
     if (chunk) {
       messages = await this.store.getMessageRange(chunk.sourceFromId, chunk.sourceToId);
     } else {
-      // Raw message ID (from unarchived recent search) — return the single message
-      const msg = await this.store.getMessage(contextId);
-      if (!msg) return null;
-      messages = [msg];
+      // Raw message ID (from unarchived recent search) — return surrounding context
+      // so the model sees both the question AND the assistant's decision.
+      messages = await this.store.getMessagesAround(contextId, 5);
+      if (messages.length === 0) return null;
       chunkRef = null;
     }
     // Truncate to maxTokens budget (keep most recent — usually most relevant)

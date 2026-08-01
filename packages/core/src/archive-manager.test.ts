@@ -30,6 +30,7 @@ class MockStore implements LynageStore {
     if (fromIdx < 0 || toIdx < 0) return [];
     return this.messages.slice(fromIdx, toIdx + 1);
   }
+  async getMessagesAround() { return []; }
   async getMessageCount() { return this.messages.length; }
   async createChunk(input: { sessionId: string; summary: string; progress: string; keywords: string[]; sourceFromId: string; sourceToId: string; timeRangeStart: number; timeRangeEnd: number }) {
     const chunk: ContextChunk = { id: `chunk-${this.chunks.size}`, ...input, directoryId: undefined, createdAt: Date.now() };

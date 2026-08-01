@@ -27,6 +27,7 @@ class MockStore implements LynageStore {
     const toIdx = this.messages.findIndex(m => m.id === toId);
     return fromIdx >= 0 && toIdx >= 0 ? this.messages.slice(fromIdx, toIdx + 1) : [];
   }
+  async getMessagesAround() { return []; }
   async getRecent() { return this.messages; }
   async listChunks() { return Array.from(this.chunks.values()); }
   async getLastArchiveTime() { return 0; }

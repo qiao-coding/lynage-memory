@@ -21,6 +21,7 @@ class MockStoreForSearch implements LynageStore {
       (m) => m.id >= fromId && m.id <= toId,
     );
   }
+  async getMessagesAround() { return []; }
   async getMessageCount() { return this.messages.length; }
   async createChunk() { return {} as ContextChunk; }
   async getChunk(id: string) { return this.chunks.get(id) ?? null; }

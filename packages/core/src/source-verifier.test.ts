@@ -14,6 +14,7 @@ class MockStore implements LynageStore {
   async getMessageRange(fromId: string, toId: string) {
     return this.messages.filter(m => m.id >= fromId && m.id <= toId);
   }
+  async getMessagesAround() { return []; }
   async getRecent(scope: { sessionId: string }) { return this.messages.filter(m => m.sessionId === scope.sessionId); }
   async listChunks() { return Array.from(this.chunks.values()); }
   async getLastArchiveTime() { return 0; }

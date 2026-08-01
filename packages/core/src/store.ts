@@ -73,6 +73,7 @@ export interface LynageStore {
   getMessage(id: string): Promise<Message | null>;
   getRecent(scope: Scope): Promise<Message[]>;
   getMessageRange(fromId: string, toId: string): Promise<Message[]>;
+  getMessagesAround(messageId: string, window?: number): Promise<Message[]>;
   getMessageCount(sessionId: string): Promise<number>;
 
   // context chunks
