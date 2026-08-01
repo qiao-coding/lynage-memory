@@ -40,12 +40,31 @@ export class ArchiveManager {
   private model: LynageModel;
   private config: ArchiveConfig;
   private compactor: GenerationCompactor;
+  /** Per-session archiving queues — serializes AI calls without blocking turns */
+  private sessionQueues = new Map<string, Promise<void>>();
 
   constructor(store: LynageStore, model: LynageModel, config: ArchiveConfig) {
     this.store = store;
     this.model = model;
     this.config = config;
     this.compactor = new GenerationCompactor(store, model, config.directoryCapacity);
+  }
+
+  /**
+   * Fire-and-forget archiving, serialized per session.
+   * Returns immediately — AI summarization runs in the background queue.
+   * The queue prevents duplicate chunk races (each session archives serially).
+   */
+  queueArchive(sessionId: string): void {
+    const prev = this.sessionQueues.get(sessionId) ?? Promise.resolve();
+    const next: Promise<void> = prev
+      .catch(() => {}) // swallow errors from prior runs
+      .then(() => this.checkAndArchive(sessionId))
+      .then(() => undefined)
+      .catch((err) => {
+        console.error(`Archiving failed for ${sessionId}:`, err instanceof Error ? err.message : err);
+      });
+    this.sessionQueues.set(sessionId, next);
   }
 
   /**

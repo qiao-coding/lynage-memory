@@ -178,9 +178,9 @@ export class TurnManager {
       assistantTokens +
       toolMessages.reduce((sum, m) => sum + (m.tokenCount ?? 0), 0);
 
-    // Trigger archiving (serialized per-session via mutex to prevent races)
+    // Trigger archiving in background (per-session queue, non-blocking)
     if (this.archiveManager) {
-      await this.archiveManager.checkAndArchive(sessionId);
+      this.archiveManager.queueArchive(sessionId);
     }
 
     return {

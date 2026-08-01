@@ -238,12 +238,25 @@ export class HistoryRetriever {
           }
         }
       } else if (child.childType === "directory") {
-        // Always recurse into sub-directories — their summaries may be relevant
-        // even when the parent is not
-        const sub = await this.drillDown(child.childId, query);
-        searched += sub.searched;
-        checked += sub.checked;
-        candidates.push(...sub.candidates);
+        // Look at the sub-directory's summary FIRST. Only descend if it
+        // might be relevant — this makes traversal O(relevant branches)
+        // instead of O(all directories).
+        const subDir = await this.store.getDirectory(child.childId);
+        if (subDir) {
+          const subRelevance = computeRelevance(
+            query,
+            subDir.overallContent + " " + subDir.mainConclusions.join(" ") + " " + subDir.importantChanges.join(" "),
+            [],
+          );
+          searched++; // Count the directory as examined
+          if (subRelevance > 0) {
+            const sub = await this.drillDown(child.childId, query);
+            searched += sub.searched - 1; // drillDown counts its root already
+            checked += sub.checked;
+            candidates.push(...sub.candidates);
+          }
+          // else: skip this subtree entirely — summary shows it's irrelevant
+        }
       }
     }
 
