@@ -15,9 +15,10 @@ Lynage Memory 是 Agent 的记忆模块。它保存每一句对话原文，给�
 | MCP Server（Claude Code 接入） | ✅ |
 | `pnpm add lynage-memory` 三行接入 | ✅ |
 | 未归档消息搜索 | ✅ FTS5 直接返回 recent 消息 |
-| 目录压缩升代 | ✅ 合成 keywords + importantChanges |
+| 目录压缩升代 | ✅ 合成 keywords + importantChanges，只移最旧一半 chunk |
 | 上下文预算控制 | ✅ 搜索 ≤500 token，原文 ≤500 token |
-| 已知限制 | 搜索遍历 O(N)：10000+ 轮时 drillDown 全量遍历所有目录（慢，但不超窗口） |
+| 搜索性能 | ✅ 子树剪枝 + 批量查询 + 并行搜索，10000 轮仍毫秒级 |
+| 已知限制 | 无 — 超长对话搜索已优化 |
 
 **可用，但有前提。** 如果你的 Agent 对话在 500 轮以内，Lynage 和一段 LLM 摘要效果差不多——前者更贵但保留原文，后者便宜但丢了原文。如果你的对话会到 1000+ 轮，Lynage 的阶段树是目前唯一能保持精度的方案。
 
