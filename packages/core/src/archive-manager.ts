@@ -40,8 +40,9 @@ export class ArchiveManager {
   private model: LynageModel;
   private config: ArchiveConfig;
   private compactor: GenerationCompactor;
-  /** Per-session archiving queues — serializes AI calls without blocking turns */
-  private sessionQueues = new Map<string, Promise<void>>();
+  /** Per-session archiving state — at most one running task per session */
+  private sessionBusy = new Set<string>();
+  private sessionDirty = new Set<string>();
 
   constructor(store: LynageStore, model: LynageModel, config: ArchiveConfig) {
     this.store = store;
@@ -51,20 +52,29 @@ export class ArchiveManager {
   }
 
   /**
-   * Fire-and-forget archiving, serialized per session.
-   * Returns immediately — AI summarization runs in the background queue.
-   * The queue prevents duplicate chunk races (each session archives serially).
+   * Fire-and-forget archiving, merged per session.
+   * At most ONE archiving task runs per session. New turns while running
+   * only mark the session dirty — the running task re-checks when done.
+   * Prevents a 10k-turn loop from queuing 10k serial AI calls.
    */
   queueArchive(sessionId: string): void {
-    const prev = this.sessionQueues.get(sessionId) ?? Promise.resolve();
-    const next: Promise<void> = prev
-      .catch(() => {}) // swallow errors from prior runs
-      .then(() => this.checkAndArchive(sessionId))
-      .then(() => undefined)
-      .catch((err) => {
+    if (this.sessionBusy.has(sessionId)) {
+      this.sessionDirty.add(sessionId); // re-check after current run finishes
+      return;
+    }
+    this.sessionBusy.add(sessionId);
+    void (async () => {
+      try {
+        do {
+          this.sessionDirty.delete(sessionId);
+          await this.checkAndArchive(sessionId);
+        } while (this.sessionDirty.has(sessionId));
+      } catch (err) {
         console.error(`Archiving failed for ${sessionId}:`, err instanceof Error ? err.message : err);
-      });
-    this.sessionQueues.set(sessionId, next);
+      } finally {
+        this.sessionBusy.delete(sessionId);
+      }
+    })();
   }
 
   /**
