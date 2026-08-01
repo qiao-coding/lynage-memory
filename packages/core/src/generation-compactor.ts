@@ -10,7 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import type { LynageStore } from "./store.js";
-import type { LynageModel } from "./model.js";
+import type { LynageModel, DirectorySummaryInput } from "./model.js";
 import type { DirectoryNode } from "./types.js";
 
 export interface CompactConfig {
@@ -72,13 +72,7 @@ export class GenerationCompactor {
     if (children.length === 0) return { compacted: false };
 
     // 1. Collect child summaries for the new parent directory
-    const childDescriptions: Array<{
-      id: string;
-      type: "chunk" | "directory";
-      summary: string;
-      progress: string;
-      conclusions: string[];
-    }> = [];
+    const childDescriptions: Array<DirectorySummaryInput["childDescriptions"][number]> = [];
 
     for (const child of children) {
       if (child.childType === "chunk") {
@@ -90,6 +84,7 @@ export class GenerationCompactor {
             summary: chunk.summary,
             progress: chunk.progress,
             conclusions: [],
+            keywords: chunk.keywords,
           });
         }
       } else {
@@ -101,6 +96,7 @@ export class GenerationCompactor {
             summary: subDir.overallContent,
             progress: subDir.progress,
             conclusions: subDir.mainConclusions,
+            importantChanges: subDir.importantChanges,
           });
         }
       }

@@ -83,7 +83,9 @@ ${content}`;
     const childList = input.childDescriptions
       .map(
         (c: DirectorySummaryInput["childDescriptions"][number], i: number) =>
-          `[${i + 1}] Type: ${c.type}\n    Summary: ${c.summary}\n    Progress: ${c.progress}\n    Conclusions: ${c.conclusions.join("; ")}`,
+          `[${i + 1}] Type: ${c.type}\n    Summary: ${c.summary}\n    Progress: ${c.progress}\n    Conclusions: ${c.conclusions.join("; ")}` +
+          (c.importantChanges?.length ? `\n    ImportantChanges: ${c.importantChanges.join("; ")}` : "") +
+          (c.keywords?.length ? `\n    Keywords: ${c.keywords.join(", ")}` : ""),
       )
       .join("\n\n");
 

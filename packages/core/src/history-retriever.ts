@@ -97,6 +97,27 @@ export class HistoryRetriever {
         }
       }
       totalChunksChecked += chunks.length;
+
+      // ---- Step 1b: Unarchived recent messages as direct candidates ----
+      // Messages not in any chunk (still in the recent window) can't be
+      // matched via chunk mapping. Return them directly as candidates.
+      const unarchived = ftsMessages.filter(
+        (m) => !chunks.some((c) => m.createdAt >= c.timeRangeStart && m.createdAt <= c.timeRangeEnd),
+      );
+      for (const msg of unarchived.slice(-10)) {
+        const relevance = computeRelevance(query, msg.content, []);
+        if (relevance > 0) {
+          candidates.push({
+            contextId: msg.id,
+            summary: msg.content.slice(0, 100),
+            progress: "",
+            keywords: [],
+            sourceRange: { from: msg.id, to: msg.id },
+            timeRange: { start: msg.createdAt, end: msg.createdAt },
+            relevance,
+          });
+        }
+      }
     }
 
     // ---- Step 2: Directory drill-down ----
@@ -222,8 +243,17 @@ export class HistoryRetriever {
    */
   async openSource(contextId: string, options?: OpenSourceOptions): Promise<OpenSourceResult | null> {
     const chunk = await this.store.getChunk(contextId);
-    if (!chunk) return null;
-    let messages = await this.store.getMessageRange(chunk.sourceFromId, chunk.sourceToId);
+    let messages: Message[];
+    let chunkRef: { directoryId?: string } | null = chunk;
+    if (chunk) {
+      messages = await this.store.getMessageRange(chunk.sourceFromId, chunk.sourceToId);
+    } else {
+      // Raw message ID (from unarchived recent search) — return the single message
+      const msg = await this.store.getMessage(contextId);
+      if (!msg) return null;
+      messages = [msg];
+      chunkRef = null;
+    }
     // Truncate to maxTokens budget (keep most recent — usually most relevant)
     if (options?.maxTokens) {
       let tokens = 0;
@@ -235,7 +265,7 @@ export class HistoryRetriever {
       messages = kept;
     }
     let directoryContext: DirectoryContext | null = null;
-    if (chunk.directoryId) { const dir = await this.store.getDirectory(chunk.directoryId);
+    if (chunkRef?.directoryId) { const dir = await this.store.getDirectory(chunkRef.directoryId);
       if (dir) directoryContext = { directoryId:dir.id, generation:dir.generation, overallContent:dir.overallContent, progress:dir.progress, mainConclusions:dir.mainConclusions, importantChanges:dir.importantChanges }; }
     return { messages, directoryContext };
   }

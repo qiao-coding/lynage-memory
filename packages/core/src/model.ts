@@ -29,6 +29,8 @@ export interface DirectorySummaryInput {
     summary: string;
     progress: string;
     conclusions: string[];
+    importantChanges?: string[];
+    keywords?: string[];
   }>;
 }
 
