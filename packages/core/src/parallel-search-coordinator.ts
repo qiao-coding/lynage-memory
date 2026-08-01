@@ -245,11 +245,12 @@ export class ParallelSearchCoordinator {
     const children = await this.store.getDirectoryChildren(input.directoryId);
     for (const child of children) {
       if (child.childType === "directory") {
+        // Pass visited down so cycle detection works across recursion depth
         const subResult = await this.runWorker({
           workerId: input.workerId,
           snapshot: input.snapshot,
           directoryId: child.childId,
-        });
+        }, visited);
         checkedNodes.push(...subResult.checkedNodes);
         candidates.push(...subResult.candidates);
       }
@@ -268,29 +269,21 @@ export class ParallelSearchCoordinator {
   private deduplicateCandidates(
     candidates: WorkerResult["candidates"],
   ): WorkerResult["candidates"] {
-    const seen = new Set<string>();
-    const deduped: WorkerResult["candidates"] = [];
+    const byKey = new Map<string, WorkerResult["candidates"][number]>();
 
     for (const c of candidates) {
       const key = `${c.sourceRange.from}-${c.sourceRange.to}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        deduped.push(c);
-      } else {
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, c);
+      } else if (c.confidence > existing.confidence) {
         // Merge: take the higher confidence
-        const existing = deduped.find(
-          (d) =>
-            d.sourceRange.from === c.sourceRange.from &&
-            d.sourceRange.to === c.sourceRange.to,
-        );
-        if (existing && c.confidence > existing.confidence) {
-          existing.confidence = c.confidence;
-          existing.reason = c.reason;
-        }
+        existing.confidence = c.confidence;
+        existing.reason = c.reason;
       }
     }
 
-    return deduped.sort((a, b) => b.confidence - a.confidence);
+    return [...byKey.values()].sort((a, b) => b.confidence - a.confidence);
   }
 
   /**
@@ -366,8 +359,9 @@ export class ParallelSearchCoordinator {
     const result: string[] = [];
     const visited = new Set<string>();
     const queue = [...rootIds];
-    while (queue.length > 0) {
-      const id = queue.shift()!;
+    let head = 0; // pointer-based queue, avoids O(n) shift()
+    while (head < queue.length) {
+      const id = queue[head++]!;
       if (visited.has(id)) continue; // Prevent infinite loops from circular refs
       visited.add(id);
       result.push(id);

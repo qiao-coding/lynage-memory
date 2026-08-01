@@ -55,6 +55,7 @@ class MockStore implements LynageStore {
   async getChunksByIds() { return []; }
   async getChunksByDirectory() { return []; }
   async listChunks() { return []; }
+  async getLastArchiveTime() { return 0; }
   async updateChunkDirectory() {}
   async createDirectory() { return {} as never; }
   async getDirectory() { return null; }

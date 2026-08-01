@@ -189,6 +189,13 @@ export class SqliteStore implements LynageStore {
     return rows.map((r) => this.toChunk(r));
   }
 
+  async getLastArchiveTime(sessionId: string): Promise<number> {
+    const row = this.raw.prepare(
+      "SELECT MAX(time_range_end) AS last FROM context_chunks WHERE session_id = ?",
+    ).get(sessionId) as { last: number | null } | undefined;
+    return row?.last ?? 0;
+  }
+
   // -----------------------------------------------------------------------
   // Directories
   // -----------------------------------------------------------------------

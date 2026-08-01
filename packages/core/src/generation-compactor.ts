@@ -51,14 +51,10 @@ export class GenerationCompactor {
       return { compacted: false };
     }
 
-    const result = await this.compact(directoryId, dir);
-
-    // Recursively check if the new parent also needs compaction
-    if (result.compacted && result.newParentId) {
-      await this.checkAndCompact(result.newParentId);
-    }
-
-    return result;
+    // Compact once, then STOP. Do NOT recurse into the new parent here —
+    // moving chunks to it makes it full too, causing infinite recursion.
+    // The next archive check will naturally compact it if needed.
+    return this.compact(directoryId, dir);
   }
 
   /**
@@ -123,20 +119,21 @@ export class GenerationCompactor {
       importantChanges: summary.importantChanges,
     });
 
-    // 4. Move chunk children from old directory to new parent
-    //    This prevents the old dir from retaining all chunks and
-    //    filling up again immediately.
+    // 4. Move the OLDEST HALF of chunk children to new parent.
+    //    Keep the other half in the old directory so it doesn't
+    //    immediately re-trigger compaction on the next check.
     const oldChildren = await this.store.getDirectoryChildren(directoryId);
     const chunkChildren = oldChildren.filter((c) => c.childType === "chunk");
-    if (chunkChildren.length > 0) {
+    const toMove = chunkChildren.slice(0, Math.ceil(chunkChildren.length / 2));
+    if (toMove.length > 0) {
       // Update chunk directoryId to point to new parent
-      for (const cc of chunkChildren) {
+      for (const cc of toMove) {
         await this.store.updateChunkDirectory(cc.childId, newParent.id);
       }
       // Move child entries to new parent
       const newChildren = await this.store.getDirectoryChildren(newParent.id);
       let sort = newChildren.length;
-      for (const cc of chunkChildren) {
+      for (const cc of toMove) {
         await this.store.addChildToDirectory({
           id: "", // Let store auto-generate UUID
           directoryId: newParent.id,

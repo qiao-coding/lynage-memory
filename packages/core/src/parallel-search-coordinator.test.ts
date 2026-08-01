@@ -29,6 +29,7 @@ class MockStore implements LynageStore {
   }
   async getRecent() { return this.messages; }
   async listChunks() { return Array.from(this.chunks.values()); }
+  async getLastArchiveTime() { return 0; }
 
   // Unused stubs
   async appendMessage() { return {} as Message; }

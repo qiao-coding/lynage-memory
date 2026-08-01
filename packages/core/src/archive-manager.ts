@@ -52,11 +52,8 @@ export class ArchiveManager {
    * Check if recent context exceeds the threshold, and archive if so.
    */
   async checkAndArchive(sessionId: string): Promise<ArchiveResult> {
-    // 0. Find the last archived timestamp to avoid re-archiving
-    const existingChunks = await this.store.listChunks(sessionId);
-    const lastArchiveTime = existingChunks.length > 0
-      ? Math.max(...existingChunks.map((c) => c.timeRangeEnd))
-      : 0;
+    // 0. Find the last archived timestamp to avoid re-archiving (single MAX query)
+    const lastArchiveTime = await this.store.getLastArchiveTime(sessionId);
 
     // 1. Get only messages newer than the last archive
     const recent = await this.store.getRecent({

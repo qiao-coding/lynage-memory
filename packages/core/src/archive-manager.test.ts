@@ -39,6 +39,7 @@ class MockStore implements LynageStore {
   async getChunksByIds(ids: string[]) { return ids.map(id => this.chunks.get(id)).filter(Boolean) as any; }
   async getChunksByDirectory() { return []; }
   async listChunks() { return Array.from(this.chunks.values()); }
+  async getLastArchiveTime() { return 0; }
   async updateChunkDirectory(chunkId: string, dirId: string) {
     const c = this.chunks.get(chunkId); if (c) (c as unknown as Record<string, unknown>).directoryId = dirId;
   }

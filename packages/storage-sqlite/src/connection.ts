@@ -128,6 +128,7 @@ export function ensureTables(raw: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_chunks_session ON context_chunks(session_id);
     CREATE INDEX IF NOT EXISTS idx_chunks_directory ON context_chunks(directory_id);
     CREATE INDEX IF NOT EXISTS idx_dir_children_dir ON directory_children(directory_id);
+    CREATE INDEX IF NOT EXISTS idx_directories_parent ON directories(parent_id);
     CREATE INDEX IF NOT EXISTS idx_directories_session ON directories(session_id);
   `);
 

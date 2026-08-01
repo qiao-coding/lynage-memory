@@ -134,10 +134,9 @@ export class HistoryRetriever {
       }
     }
 
-    // ---- Step 3: Build candidate list from matched chunks ----
-    for (const chunkId of matchedChunkIds) {
-      const chunk = await this.store.getChunk(chunkId);
-      if (!chunk) continue;
+    // ---- Step 3: Build candidate list from matched chunks (batch fetch) ----
+    const matchedChunks = await this.store.getChunksByIds([...matchedChunkIds]);
+    for (const chunk of matchedChunks) {
 
       // Compute relevance score
       const relevance = computeRelevance(query, chunk.summary, chunk.keywords);
@@ -214,19 +213,33 @@ export class HistoryRetriever {
     // Get children
     const children = await this.store.getDirectoryChildren(directoryId);
 
+    // Subtree pruning: if directory itself is irrelevant, skip its chunks
+    // (still recurse into sub-dirs since their summaries may differ)
+    const shouldCheckChunks = dirRelevance > 0;
+
+    // Batch-fetch all chunk children in this directory (single query)
+    const chunkIds = shouldCheckChunks
+      ? children.filter((c) => c.childType === "chunk").map((c) => c.childId)
+      : [];
+    const chunks = chunkIds.length > 0 ? await this.store.getChunksByIds(chunkIds) : [];
+    const chunkMap = new Map(chunks.map((c) => [c.id, c]));
+
     for (const child of children) {
       if (child.childType === "chunk") {
         checked++;
-        const chunk = await this.store.getChunk(child.childId);
+        if (!shouldCheckChunks) continue;
+        const chunk = chunkMap.get(child.childId);
         if (chunk) {
           const rel = computeRelevance(query, chunk.summary, chunk.keywords);
-          // Boost relevance if parent directory matched
+          // Boost relevance if parent directory matched strongly
           const boostedRel = Math.max(rel, dirRelevance > 0.3 ? rel * 1.3 : rel);
           if (boostedRel > 0) {
             candidates.push({ contextId: chunk.id, relevance: boostedRel });
           }
         }
       } else if (child.childType === "directory") {
+        // Always recurse into sub-directories — their summaries may be relevant
+        // even when the parent is not
         const sub = await this.drillDown(child.childId, query);
         searched += sub.searched;
         checked += sub.checked;

@@ -27,6 +27,7 @@ class MockStoreForSearch implements LynageStore {
   async getChunksByIds(ids: string[]) { return ids.map(id => this.chunks.get(id)).filter((c): c is NonNullable<typeof c> => c != null); }
   async getChunksByDirectory() { return []; }
   async listChunks() { return Array.from(this.chunks.values()); }
+  async getLastArchiveTime() { return 0; }
   async updateChunkDirectory() {}
   async createDirectory() { return {} as DirectoryNode; }
   async getDirectory(id: string) { return this.dirs.get(id) ?? null; }
