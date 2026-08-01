@@ -281,31 +281,36 @@ export class HistoryRetriever {
   /**
    * Compile retrieved context into a model-readable text block.
    */
-  compileRetrievedContext(result: SearchResult): string {
-    if (result.candidates.length === 0) {
-      return "[No relevant history found.]";
-    }
+  compileRetrievedContext(result: SearchResult, maxTokens?: number): string {
+    if (result.candidates.length === 0) return "[No relevant history found.]";
 
     const lines: string[] = [
       `# History Search Results (${result.status})`,
       `Found ${result.candidates.length} relevant conversation segments:\n`,
     ];
+    let totalEst = estimateTokenCount(lines.join("\n"));
 
     for (let i = 0; i < result.candidates.length; i++) {
       const c = result.candidates[i]!;
       const date = new Date(c.timeRange.start).toLocaleDateString();
-      lines.push(
+      const block = [
         `## Result ${i + 1} [${date}] (relevance: ${Math.round(c.relevance * 100)}%)`,
         `Context ID: ${c.contextId}`,
         `Summary: ${c.summary}`,
-        `Progress: ${c.progress}`,
-        `Keywords: ${c.keywords.join(", ")}`,
-        "",
-      );
-    }
-
-    if (result.suggestion) {
-      lines.push(`> ${result.suggestion}`);
+      ];
+      // Directory context: adds signal but costs tokens — include only if budget allows
+      if (c.directoryContext) {
+        block.push(`Phase: ${c.directoryContext.overallContent}`);
+        if (c.directoryContext.mainConclusions.length > 0) {
+          block.push(`Conclusions: ${c.directoryContext.mainConclusions.join("; ")}`);
+        }
+      }
+      const blockText = block.join("\n") + "\n";
+      const blockTokens = estimateTokenCount(blockText);
+      // Stop adding candidates when budget exceeded
+      if (maxTokens && totalEst + blockTokens > maxTokens) break;
+      totalEst += blockTokens;
+      lines.push(...block, "");
     }
 
     return lines.join("\n");
