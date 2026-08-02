@@ -10,6 +10,7 @@
 
 import type { Message } from "./types.js";
 import type { LynageStore } from "./store.js";
+import type { LynageModel, QueryUnderstanding } from "./model.js";
 import { estimateTokenCount } from "./token-counter.js";
 
 // ---- Types ----
@@ -64,9 +65,11 @@ export interface DirectoryTreeNode {
 
 export class HistoryRetriever {
   private store: LynageStore;
+  private model: LynageModel;
 
-  constructor(store: LynageStore) {
+  constructor(store: LynageStore, model?: LynageModel) {
     this.store = store;
+    this.model = model ?? ({} as LynageModel);
   }
 
   /**
@@ -78,8 +81,19 @@ export class HistoryRetriever {
     let searchedDirectories = 0;
     let totalChunksChecked = 0;
 
-    // ---- Step 1: FTS keyword search on messages ----
-    const ftsMessages = await this.store.searchMessages(query, sessionId);
+    // ---- Step 0: Query understanding (semantic tree navigation) ----
+    // LLM turns vague question into search intent. Falls back gracefully
+    // if model doesn't implement it.
+    let understanding: QueryUnderstanding | undefined;
+    if (this.model.analyzeSearchQuery) {
+      try {
+        understanding = await this.model.analyzeSearchQuery(query);
+      } catch { /* fall back to raw query */ }
+    }
+
+    // ---- Step 1: FTS keyword search on messages (auxiliary path) ----
+    const ftsQuery = understanding?.keywords?.length ? understanding.keywords.join(" ") : query;
+    const ftsMessages = await this.store.searchMessages(ftsQuery, sessionId);
     const matchedChunkIds = new Set<string>();
 
     // Find which chunks contain these messages
@@ -125,7 +139,7 @@ export class HistoryRetriever {
     searchedDirectories = rootDirs.length;
 
     for (const dir of rootDirs) {
-      const dirResults = await this.drillDown(dir.id, query);
+      const dirResults = await this.drillDown(dir.id, query, understanding);
       searchedDirectories += dirResults.searched;
       totalChunksChecked += dirResults.checked;
 
@@ -191,6 +205,7 @@ export class HistoryRetriever {
   async drillDown(
     directoryId: string,
     query: string,
+    understanding?: QueryUnderstanding,
   ): Promise<{
     candidates: Array<{ contextId: string; relevance: number }>;
     searched: number;
@@ -203,19 +218,30 @@ export class HistoryRetriever {
     const dir = await this.store.getDirectory(directoryId);
     if (!dir) return { candidates, searched, checked };
 
-    // Search in directory summary
-    const dirRelevance = computeRelevance(
-      query,
-      dir.overallContent + " " + dir.mainConclusions.join(" ") + " " + dir.importantChanges.join(" "),
-      [],
-    );
+    const dirText = dir.overallContent + " " + dir.mainConclusions.join(" ") + " " + dir.importantChanges.join(" ");
+
+    // Semantic relevance (tree navigation): LLM judges whether this directory
+    // summary relates to the question. Falls back to keyword computeRelevance.
+    let dirRelevant: boolean;
+    if (this.model.isDirectoryRelevant && understanding) {
+      try {
+        dirRelevant = await this.model.isDirectoryRelevant({
+          directorySummary: dirText,
+          question: understanding.description || query,
+          intent: understanding.intent,
+        });
+      } catch {
+        dirRelevant = computeRelevance(query, dirText, []) > 0;
+      }
+    } else {
+      dirRelevant = computeRelevance(query, dirText, []) > 0;
+    }
 
     // Get children
     const children = await this.store.getDirectoryChildren(directoryId);
 
-    // Subtree pruning: if directory itself is irrelevant, skip its chunks
-    // (still recurse into sub-dirs since their summaries may differ)
-    const shouldCheckChunks = dirRelevance > 0;
+    // Subtree pruning: if directory is semantically irrelevant, skip its chunks
+    const shouldCheckChunks = dirRelevant;
 
     // Batch-fetch all chunk children in this directory (single query)
     const chunkIds = shouldCheckChunks
@@ -232,30 +258,21 @@ export class HistoryRetriever {
         if (chunk) {
           const rel = computeRelevance(query, chunk.summary, chunk.keywords);
           // Boost relevance if parent directory matched strongly
-          const boostedRel = Math.max(rel, dirRelevance > 0.3 ? rel * 1.3 : rel);
+          const boostedRel = Math.max(rel, dirRelevant ? rel * 1.3 : rel);
           if (boostedRel > 0) {
             candidates.push({ contextId: chunk.id, relevance: boostedRel });
           }
         }
       } else if (child.childType === "directory") {
-        // Look at the sub-directory's summary FIRST. Only descend if it
-        // might be relevant — this makes traversal O(relevant branches)
-        // instead of O(all directories).
+        // Look at the sub-directory's summary FIRST (semantic). Only descend
+        // if relevant — traversal is O(relevant branches), not O(all dirs).
         const subDir = await this.store.getDirectory(child.childId);
         if (subDir) {
-          const subRelevance = computeRelevance(
-            query,
-            subDir.overallContent + " " + subDir.mainConclusions.join(" ") + " " + subDir.importantChanges.join(" "),
-            [],
-          );
           searched++; // Count the directory as examined
-          if (subRelevance > 0) {
-            const sub = await this.drillDown(child.childId, query);
-            searched += sub.searched - 1; // drillDown counts its root already
-            checked += sub.checked;
-            candidates.push(...sub.candidates);
-          }
-          // else: skip this subtree entirely — summary shows it's irrelevant
+          const sub = await this.drillDown(child.childId, query, understanding);
+          searched += sub.searched - 1; // drillDown counts its root already
+          checked += sub.checked;
+          candidates.push(...sub.candidates);
         }
       }
     }

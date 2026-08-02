@@ -79,6 +79,8 @@ class MockModel implements LynageModel {
   async summarizeChunk() { return { summary: "Test summary", progress: "Test progress", keywords: ["test"] } as ChunkSummary; }
   async summarizeDirectory() { return { overallContent: "Test content", progress: "Test progress", mainConclusions: ["Test conclusion"], importantChanges: [] } as DirectorySummary; }
   async analyzeSearchBatch() { return { relevantIds: [], reasoning: "", shouldContinue: false }; }
+  async analyzeSearchQuery() { return { intent: "decision" as const, description: "test", keywords: ["test"] }; }
+  async isDirectoryRelevant() { return true; }
 }
 
 describe("ArchiveManager", () => {

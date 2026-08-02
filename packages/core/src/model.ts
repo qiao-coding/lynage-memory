@@ -61,9 +61,35 @@ export interface SearchBatchResult {
   refinedUnderstanding?: string;
 }
 
+/** Query understanding — LLM turns a vague question into a search intent */
+export interface QueryUnderstanding {
+  /** Search intent */
+  intent: "fact_lookup" | "process_recall" | "decision";
+  /** Semantic description of what the user is looking for */
+  description: string;
+  /** Auxiliary retrieval keywords (fallback, not primary) */
+  keywords: string[];
+  /** Optional time range hint */
+  timeRange?: { start: number; end: number };
+}
+
+/** Input for directory relevance judgment (semantic tree navigation) */
+export interface DirectoryRelevanceInput {
+  /** Directory summary — the parent context that guides navigation */
+  directorySummary: string;
+  /** User's original question */
+  question: string;
+  /** Query understanding intent */
+  intent: string;
+}
+
 /** Model interface that Core depends on */
 export interface LynageModel {
   summarizeChunk(input: ChunkSummaryInput): Promise<ChunkSummary>;
   summarizeDirectory(input: DirectorySummaryInput): Promise<DirectorySummary>;
   analyzeSearchBatch(input: SearchBatchInput): Promise<SearchBatchResult>;
+  /** Vague question → search intent (semantic, not keyword extraction) */
+  analyzeSearchQuery(question: string): Promise<QueryUnderstanding>;
+  /** Does this directory's summary semantically relate to the question? */
+  isDirectoryRelevant(input: DirectoryRelevanceInput): Promise<boolean>;
 }

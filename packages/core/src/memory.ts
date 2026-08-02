@@ -43,7 +43,7 @@ export class LynageMemory {
       directoryCapacity: this._config.directoryCapacity,
     });
     this._turnManager = new TurnManager(this._store, this._archiveManager);
-    this._historyRetriever = new HistoryRetriever(this._store);
+    this._historyRetriever = new HistoryRetriever(this._store, this._model);
     this._searchTaskManager = new SearchTaskManager(this._store);
     this._sourceVerifier = new SourceVerifier(this._store);
     this._parallelSearch = new ParallelSearchCoordinator(this._store, this._historyRetriever);

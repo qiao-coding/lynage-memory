@@ -3,6 +3,7 @@
 // Uses generateObject + Zod schemas for structured model output.
 // ---------------------------------------------------------------------------
 
+import { z } from "zod";
 import { generateObject, generateText, type LanguageModelV1 } from "ai";
 import type {
   LynageModel,
@@ -12,6 +13,8 @@ import type {
   DirectorySummary,
   SearchBatchInput,
   SearchBatchResult,
+  QueryUnderstanding,
+  DirectoryRelevanceInput,
 } from "@lynage/core";
 import {
   ChunkSummarySchema,
@@ -166,6 +169,76 @@ Determine:
     );
 
     return result.object as SearchBatchResult;
+  }
+
+  /**
+   * Vague question → search intent (semantic tree navigation).
+   * Extracts what the user is looking for, NOT just keywords.
+   */
+  async analyzeSearchQuery(question: string): Promise<QueryUnderstanding> {
+    const schema = z.object({
+      intent: z.enum(["fact_lookup", "process_recall", "decision"]),
+      description: z.string(),
+      keywords: z.array(z.string()),
+    });
+    const prompt = `Analyze this user question from a conversation memory system. The user may not remember exact terms — extract what they are LOOKING FOR semantically.
+
+Question: "${question}"
+
+Return:
+- intent: "fact_lookup" (looking for a specific fact), "process_recall" (remembering how a decision was reached — what was tried, abandoned, chosen), or "decision" (what was decided)
+- description: a semantic description of what memory the user needs (e.g. "the styling approach decision process")
+- keywords: 2-4 key terms that would appear in the relevant conversation (topic words like 样式方案, database — NOT filler like 记不清/怎么/定了)`;
+
+    try {
+      const result = await retryWithValidation(
+        () =>
+          generateObject({ model: this.model, schema, system: this.systemPrompt, prompt }),
+        MAX_RETRIES,
+      );
+      return result.object as QueryUnderstanding;
+    } catch {
+      // Fallback: strip fillers, keep likely topic words
+      const keywords = question
+        .replace(/[记不清|怎么|定了|最后|哪个|是不是|中间|换了|什么|我们|当时|我|的|方案事]/g, " ")
+        .split(/\s+/)
+        .filter((k) => k.length > 1)
+        .slice(0, 4);
+      return {
+        intent: question.includes("怎么定") || question.includes("过程") || question.includes("中间") ? "process_recall" : "decision",
+        description: `memory about: ${keywords.join(", ")}`,
+        keywords: keywords.length > 0 ? keywords : [question.slice(0, 20)],
+      };
+    }
+  }
+
+  /**
+   * Semantic tree navigation: does this directory's summary relate to the question?
+   * The parent context (directory summary) guides whether to descend.
+   */
+  async isDirectoryRelevant(input: DirectoryRelevanceInput): Promise<boolean> {
+    const prompt = `You are navigating a memory directory tree. Decide whether to descend into this directory.
+
+User question: "${input.question}"
+What the user is looking for: intent=${input.intent}
+
+Directory summary (parent context):
+"${input.directorySummary}"
+
+Does this directory's content relate to what the user is looking for? Answer with a single word: YES or NO.
+- YES if the directory covers the topic/semantics of the question (even if exact words differ)
+- NO if it's clearly unrelated`;
+
+    try {
+      const text = await generateText({ model: this.model, system: this.systemPrompt, prompt, maxTokens: 10 });
+      const t = text.text.trim().toUpperCase();
+      return t.startsWith("YES");
+    } catch {
+      // Fallback: token overlap
+      const terms: string[] = input.question.replace(/[^\w\s一-鿿]/g, " ").split(/\s+/).filter((k) => k.length > 1);
+      const summary = input.directorySummary;
+      return terms.some((t: string) => summary.includes(t));
+    }
   }
 }
 

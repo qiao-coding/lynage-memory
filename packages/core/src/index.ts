@@ -39,6 +39,8 @@ export type {
   DirectorySummary,
   SearchBatchInput,
   SearchBatchResult,
+  QueryUnderstanding,
+  DirectoryRelevanceInput,
 } from "./model.js";
 
 // Schemas & validation
