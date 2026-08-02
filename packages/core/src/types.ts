@@ -122,6 +122,8 @@ export interface Scope {
   afterId?: string;
   /** Only return messages created after this timestamp (prevents re-archiving) */
   since?: number;
+  /** Return oldest-first from `since` (for archive cursor traversal) */
+  asc?: boolean;
 }
 
 /** Token budget tracking */

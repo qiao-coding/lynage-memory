@@ -53,7 +53,7 @@ for(let i=1;i<=T;i++){
 // Forget-style questions: user doesn't remember details, asks about the PROCESS
 const questions=FACTS.map(([n,mainstream,tried,chosen,problem,detail])=>({
   q:`关于${n}的事，我记不太清了。我们当时是怎么定的？一开始是不是用了别的方案？中间是不是换了什么？最后定的是哪个？`,
-  fact:chosen, wrong:[mainstream,tried], search:`${n} 方案`,
+  fact:chosen, wrong:[mainstream,tried],
 }));
 
 async function judge(q:string,ans:string,f:string,w:string[]){const p=`你是严格事实核查员。评估回答是否基于对话事实。
@@ -75,23 +75,24 @@ console.log("Storing (async archiving)...");
 const st0=performance.now();
 for(let i=0;i<turns.length;i++){const t=turns[i]!;const tn=await mem.startTurn("s1","u1",t.u);await tn.finish({response:t.a});
   if((i+1)%2000===0){const s=await mem.getArchiveStats("s1");console.log(`  ${i+1}/${T}: ${s.chunkCount}c ${s.directoryCount}d ${((performance.now()-st0)/1000).toFixed(0)}s`);}}
-let st=await mem.getArchiveStats("s1");let last=-1,stable=0;const drainT0=performance.now();
-while((performance.now()-drainT0)<300000){st=await mem.getArchiveStats("s1");if(st.chunkCount===last)stable++;else{stable=0;last=st.chunkCount;}if(st.chunkCount>0&&stable>=5)break;await new Promise(r=>setTimeout(r,2000));}
-st=await mem.getArchiveStats("s1");
+// Await background archiving to drain (NOT polling)
+await mem.waitForArchiving("s1");
+const st=await mem.getArchiveStats("s1");
 const stS=(performance.now()-st0)/1000;
 console.log(`Store: ${stS.toFixed(0)}s ${st.chunkCount}c ${st.directoryCount}d`);
 
 console.log("Answering (full context)...");
 let acc=0,hal=0,ti=0,to=0,ts=0,tl=0;const a0=performance.now();
 for(let i=0;i<questions.length;i++){const q=questions[i]!;
-  const s0=performance.now();const sr=await mem.search({query:q.search,sessionId:"s1"});ts+=performance.now()-s0;
+  // Full vague question as search input — system extracts its own keywords
+  const s0=performance.now();const sr=await mem.search({query:q.q,sessionId:"s1"});ts+=performance.now()-s0;
   let msgs:any[]=[];
   for(let ci=0;ci<Math.min(sr.candidates.length,4);ci++){const or=await mem.openSource(sr.candidates[ci]!.contextId);if(or)msgs.push(...or.messages);}
   const cx=msgs.map((x:any)=>`[${x.role}] ${x.content}`).join("\n");
   const l0=performance.now();const an=await ask(`根据对话历史回答，用中文。如果历史中没有明确提到，诚实说不知道，不要猜。\n---\n${cx}\n---\n${q.q}`);tl+=performance.now()-l0;
   ti+=an.input;to+=an.output;
   const j=await judge(q.q,an.text,q.fact,q.wrong);if(j.ok)acc++;if(j.hal)hal++;
-  console.log(`  Q${i+1} ${q.search}: srch=${sr.candidates.length} ${j.ok?"✅":j.hal?"⚠️HAL":"❌"} | ${an.text.slice(0,90)}`);
+  console.log(`  Q${i+1}: srch=${sr.candidates.length} ${j.ok?"✅":j.hal?"⚠️HAL":"❌"} | ${an.text.slice(0,90)}`);
 }
 const ansS=(performance.now()-a0)/1000;const cost=ti*IC+to*OC;
 console.log(`\n${"=".repeat(55)}`);

@@ -380,27 +380,52 @@ export class HistoryRetriever {
  */
 function computeRelevance(query: string, text: string, keywords: string[]): number {
   const queryLower = query.toLowerCase();
-  const queryTerms = queryLower.split(/\s+/);
-
-  // Check text match
   const textLower = text.toLowerCase();
-  let score = 0;
 
-  for (const term of queryTerms) {
+  // Latin terms: split by space (word boundaries preserved)
+  const latinTerms = queryLower.split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+  let score = 0;
+  let matched = 0;
+
+  for (const term of latinTerms) {
     if (textLower.includes(term)) {
-      score += 0.3;
+      score += 0.25;
+      matched++;
     }
   }
 
-  // Check keyword match
+  // CJK: Chinese has no spaces — a full question is ONE token.
+  // Match by sliding windows (2-4 chars) so "关于样式方案的事我们当时怎么定的..."
+  // can match "样式方案" appearing in summaries.
+  const cjkChars = queryLower.replace(/[^一-鿿㐀-䶿]/g, "");
+  if (cjkChars.length >= 2) {
+    // Try longest window first; one hit per window length
+    const maxWin = Math.min(4, cjkChars.length);
+    for (let win = maxWin; win >= 2; win--) {
+      let hit = false;
+      for (let i = 0; i + win <= cjkChars.length; i++) {
+        const sub = cjkChars.slice(i, i + win);
+        if (textLower.includes(sub)) {
+          score += 0.25;
+          matched++;
+          hit = true;
+          break;
+        }
+      }
+      if (hit) break; // one window-length match is enough signal
+    }
+  }
+
+  // Keyword match
   for (const kw of keywords) {
     const kwLower = kw.toLowerCase();
-    for (const term of queryTerms) {
-      if (kwLower.includes(term) || term.includes(kwLower)) {
-        score += 0.2;
-      }
+    if (latinTerms.some((t) => kwLower.includes(t)) || (cjkChars.length >= 2 && [...cjkChars].some((_, i) => kwLower.includes(cjkChars.slice(i, i + 2))))) {
+      score += 0.15;
     }
   }
 
-  return Math.min(score, 1.0);
+  // Normalize
+  const maxScore = Math.max(matched, 1) * 0.25 + keywords.length * 0.15;
+  if (maxScore <= 0) return 0;
+  return Math.min(score / Math.max(maxScore, 1), 1.0);
 }

@@ -43,6 +43,7 @@ export class ArchiveManager {
   /** Per-session archiving state — at most one running task per session */
   private sessionBusy = new Set<string>();
   private sessionDirty = new Set<string>();
+  private sessionTask = new Map<string, Promise<void>>();
 
   constructor(store: LynageStore, model: LynageModel, config: ArchiveConfig) {
     this.store = store;
@@ -63,7 +64,7 @@ export class ArchiveManager {
       return;
     }
     this.sessionBusy.add(sessionId);
-    void (async () => {
+    const task = (async () => {
       try {
         do {
           this.sessionDirty.delete(sessionId);
@@ -73,8 +74,15 @@ export class ArchiveManager {
         console.error(`Archiving failed for ${sessionId}:`, err instanceof Error ? err.message : err);
       } finally {
         this.sessionBusy.delete(sessionId);
+        this.sessionTask.delete(sessionId);
       }
     })();
+    this.sessionTask.set(sessionId, task);
+  }
+
+  /** Await background archiving to drain for a session (for tests / shutdown). */
+  waitForIdle(sessionId: string): Promise<void> {
+    return this.sessionTask.get(sessionId) ?? Promise.resolve();
   }
 
   /**
@@ -84,10 +92,14 @@ export class ArchiveManager {
     // 0. Find the last archived timestamp to avoid re-archiving (single MAX query)
     const lastArchiveTime = await this.store.getLastArchiveTime(sessionId);
 
-    // 1. Get only messages newer than the last archive
+    // 1. Get only messages newer than the last archive.
+    //    Traverse OLDEST-first from the cursor so ALL unarchived messages
+    //    get covered — not just the most recent 100. Batch of 200 per pass.
     const recent = await this.store.getRecent({
       sessionId,
       since: lastArchiveTime,
+      limit: 200,
+      asc: true,
     });
 
     // 2. Compute token estimate
@@ -116,22 +128,36 @@ export class ArchiveManager {
       return { archived: false, keptMessageCount: recent.length, archivedMessageCount: 0 };
     }
 
-    // 7. Generate chunk summary from the model
-    const summary = await this.model.summarizeChunk({
-      messages: toArchive,
-    });
+    // 7. Split into chunk-sized batches (~4000 tokens each) and summarize
+    //    in PARALLEL — this is the throughput bottleneck (AI call ~3-5s each).
+    const batches = splitByTokens(toArchive, this.config.retainTokens);
+    const CONCURRENCY = 4;
+    const summaries: Array<{ summary: string; progress: string; keywords: string[] }> = [];
+    for (let i = 0; i < batches.length; i += CONCURRENCY) {
+      const slice = batches.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(
+        slice.map((batch) => this.model.summarizeChunk({ messages: batch })),
+      );
+      summaries.push(...results);
+    }
 
-    // 8. Create the Context Chunk
-    const chunk = await this.store.createChunk({
-      sessionId,
-      timeRangeStart: toArchive[0]!.createdAt,
-      timeRangeEnd: toArchive[toArchive.length - 1]!.createdAt,
-      summary: summary.summary,
-      progress: summary.progress,
-      keywords: summary.keywords,
-      sourceFromId: toArchive[0]!.id,
-      sourceToId: toArchive[toArchive.length - 1]!.id,
-    });
+    // 8. Create Context Chunks (one per batch)
+    const chunks = [];
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i]!;
+      const summary = summaries[i]!;
+      const chunk = await this.store.createChunk({
+        sessionId,
+        timeRangeStart: batch[0]!.createdAt,
+        timeRangeEnd: batch[batch.length - 1]!.createdAt,
+        summary: summary.summary,
+        progress: summary.progress,
+        keywords: summary.keywords,
+        sourceFromId: batch[0]!.id,
+        sourceToId: batch[batch.length - 1]!.id,
+      });
+      chunks.push(chunk);
+    }
 
     // 9. Find or create the G0 root directory for this session
     const g0Dirs = await this.store.getRootDirectories(sessionId);
@@ -156,18 +182,31 @@ export class ArchiveManager {
       });
     }
 
-    // 10. Add chunk as child of the G0 directory
+    // 10. Add chunks as children of the G0 directory
     const children = await this.store.getDirectoryChildren(g0Dir.id);
-    await this.store.addChildToDirectory({
-      id: generateId(),
-      directoryId: g0Dir.id,
-      childType: "chunk",
-      childId: chunk.id,
-      sortOrder: children.length,
-    });
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]!;
+      await this.store.addChildToDirectory({
+        id: generateId(),
+        directoryId: g0Dir.id,
+        childType: "chunk",
+        childId: chunk.id,
+        sortOrder: children.length + i,
+      });
+      await this.store.updateChunkDirectory(chunk.id, g0Dir.id);
+    }
 
-    // 11. Persist the chunk's directory association
-    await this.store.updateChunkDirectory(chunk.id, g0Dir.id);
+    // 11. Update the G0 directory summary so the parent context actually
+    //     reflects the chunk contents (search drill-down matches on this).
+    const allChunks = await this.store.listChunks(sessionId);
+    const dirKeywords = [...new Set(allChunks.flatMap((c) => c.keywords))];
+    const dirSummaries = allChunks.map((c) => c.summary.slice(0, 60));
+    await this.store.updateDirectory(g0Dir.id, {
+      overallContent:
+        "Phases covered: " + dirKeywords.slice(0, 30).join(", ") +
+        (dirSummaries.length > 0 ? " | Chunks: " + dirSummaries.join(" | ") : ""),
+      progress: `Archived ${allChunks.length} windows`,
+    });
 
     // 12. Check generational compaction for all root dirs (M5)
     const allRootDirs = await this.store.getRootDirectories(sessionId);
@@ -177,7 +216,7 @@ export class ArchiveManager {
 
     return {
       archived: true,
-      chunkId: chunk.id,
+      chunkId: chunks[0]?.id,
       directoryId: g0Dir.id,
       keptMessageCount: recent.length - toArchive.length,
       archivedMessageCount: toArchive.length,
@@ -203,6 +242,28 @@ export class ArchiveManager {
 let _idCounter = 0;
 function generateId(): string {
   return `id-${Date.now()}-${++_idCounter}`;
+}
+
+/**
+ * Split messages into batches each up to `batchTokens` worth of tokens.
+ * Used to parallelize AI summarization into multiple chunks.
+ */
+function splitByTokens(messages: Message[], batchTokens: number): Message[][] {
+  const batches: Message[][] = [];
+  let current: Message[] = [];
+  let tokens = 0;
+  for (const msg of messages) {
+    const t = msg.tokenCount ?? estimateTokenCount(msg.content);
+    if (current.length > 0 && tokens + t > batchTokens) {
+      batches.push(current);
+      current = [];
+      tokens = 0;
+    }
+    current.push(msg);
+    tokens += t;
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
 }
 
 /**

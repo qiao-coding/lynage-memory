@@ -200,6 +200,11 @@ export class LynageMemory {
     return this._archiveManager.checkAndArchive(sessionId);
   }
 
+  /** Await background archiving to drain (tests / explicit sync points). */
+  async waitForArchiving(sessionId: string): Promise<void> {
+    return this._archiveManager.waitForIdle(sessionId);
+  }
+
   async search(options: SearchParams): Promise<SearchResult> {
     return this._historyRetriever.search(options);
   }

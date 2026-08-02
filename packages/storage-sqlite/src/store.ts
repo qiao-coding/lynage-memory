@@ -79,15 +79,16 @@ export class SqliteStore implements LynageStore {
       conditions.push(gt(schema.messages.createdAt, scope.since));
     }
 
+    // asc=true: oldest-first from `since` (archive cursor traversal).
+    // asc=false (default): most-recent-first, then re-sorted chronologically.
     const rows = await this.db
       .select()
       .from(schema.messages)
       .where(and(...conditions))
-      .orderBy(desc(schema.messages.createdAt))
+      .orderBy(scope.asc ? asc(schema.messages.createdAt) : desc(schema.messages.createdAt))
       .limit(limit);
 
-    // Re-sort chronologically for consumption
-    return rows.reverse().map((r) => this.toMessage(r));
+    return rows.map((r) => this.toMessage(r));
   }
 
   async getMessageRange(fromId: string, toId: string): Promise<Message[]> {
