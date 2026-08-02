@@ -91,50 +91,11 @@ export class HistoryRetriever {
       } catch { /* fall back to raw query */ }
     }
 
-    // ---- Step 1: FTS keyword search on messages (auxiliary path) ----
-    const ftsQuery = understanding?.keywords?.length ? understanding.keywords.join(" ") : query;
-    const ftsMessages = await this.store.searchMessages(ftsQuery, sessionId);
     const matchedChunkIds = new Set<string>();
 
-    // Find which chunks contain these messages
-    if (ftsMessages.length > 0) {
-      const chunks = await this.store.listChunks(sessionId);
-      for (const chunk of chunks) {
-        if (
-          ftsMessages.some(
-            (m) =>
-              m.createdAt >= chunk.timeRangeStart &&
-              m.createdAt <= chunk.timeRangeEnd,
-          )
-        ) {
-          matchedChunkIds.add(chunk.id);
-        }
-      }
-      totalChunksChecked += chunks.length;
-
-      // ---- Step 1b: Unarchived recent messages as direct candidates ----
-      // Messages not in any chunk (still in the recent window) can't be
-      // matched via chunk mapping. Return them directly as candidates.
-      const unarchived = ftsMessages.filter(
-        (m) => !chunks.some((c) => m.createdAt >= c.timeRangeStart && m.createdAt <= c.timeRangeEnd),
-      );
-      for (const msg of unarchived.slice(-10)) {
-        const relevance = computeRelevance(query, msg.content, []);
-        if (relevance > 0) {
-          candidates.push({
-            contextId: msg.id,
-            summary: msg.content.slice(0, 100),
-            progress: "",
-            keywords: [],
-            sourceRange: { from: msg.id, to: msg.id },
-            timeRange: { start: msg.createdAt, end: msg.createdAt },
-            relevance,
-          });
-        }
-      }
-    }
-
-    // ---- Step 2: Directory drill-down ----
+    // ---- Step 1 (PRIMARY): Directory drill-down with LLM semantic matching ----
+    // Summary-first tree navigation: LLM judges directory/chunk summaries
+    // against the question, descends relevant branches, locates windows.
     const rootDirs = await this.store.getRootDirectories(sessionId);
     searchedDirectories = rootDirs.length;
 
@@ -145,6 +106,46 @@ export class HistoryRetriever {
 
       for (const candidate of dirResults.candidates) {
         matchedChunkIds.add(candidate.contextId);
+      }
+    }
+
+    // ---- Step 2 (AUXILIARY): FTS5 keyword search on messages ----
+    // Only when semantic tree navigation found nothing — reinforces gaps.
+    if (matchedChunkIds.size === 0) {
+      const ftsQuery = understanding?.keywords?.length ? understanding.keywords.join(" ") : query;
+      const ftsMessages = await this.store.searchMessages(ftsQuery, sessionId);
+
+      if (ftsMessages.length > 0) {
+        const chunks = await this.store.listChunks(sessionId);
+        for (const chunk of chunks) {
+          if (
+            ftsMessages.some(
+              (m) => m.createdAt >= chunk.timeRangeStart && m.createdAt <= chunk.timeRangeEnd,
+            )
+          ) {
+            matchedChunkIds.add(chunk.id);
+          }
+        }
+        totalChunksChecked += chunks.length;
+
+        // Unarchived recent messages as direct candidates
+        const unarchived = ftsMessages.filter(
+          (m) => !chunks.some((c) => m.createdAt >= c.timeRangeStart && m.createdAt <= c.timeRangeEnd),
+        );
+        for (const msg of unarchived.slice(-10)) {
+          const relevance = computeRelevance(query, msg.content, []);
+          if (relevance > 0) {
+            candidates.push({
+              contextId: msg.id,
+              summary: msg.content.slice(0, 100),
+              progress: "",
+              keywords: [],
+              sourceRange: { from: msg.id, to: msg.id },
+              timeRange: { start: msg.createdAt, end: msg.createdAt },
+              relevance,
+            });
+          }
+        }
       }
     }
 
@@ -256,11 +257,24 @@ export class HistoryRetriever {
         if (!shouldCheckChunks) continue;
         const chunk = chunkMap.get(child.childId);
         if (chunk) {
-          const rel = computeRelevance(query, chunk.summary, chunk.keywords);
-          // Boost relevance if parent directory matched strongly
-          const boostedRel = Math.max(rel, dirRelevant ? rel * 1.3 : rel);
-          if (boostedRel > 0) {
-            candidates.push({ contextId: chunk.id, relevance: boostedRel });
+          // Summary-first: LLM semantic match on chunk summary (falls back to keyword)
+          let relevant: boolean;
+          if (this.model.isChunkRelevant && understanding) {
+            try {
+              relevant = await this.model.isChunkRelevant({
+                chunkSummary: chunk.summary,
+                chunkKeywords: chunk.keywords,
+                question: understanding.description || query,
+                intent: understanding.intent,
+              });
+            } catch {
+              relevant = computeRelevance(query, chunk.summary, chunk.keywords) > 0;
+            }
+          } else {
+            relevant = computeRelevance(query, chunk.summary, chunk.keywords) > 0;
+          }
+          if (relevant) {
+            candidates.push({ contextId: chunk.id, relevance: dirRelevant ? 0.8 : 0.6 });
           }
         }
       } else if (child.childType === "directory") {

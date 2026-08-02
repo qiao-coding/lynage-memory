@@ -115,8 +115,9 @@ export class GenerationCompactor {
       timeRangeEnd: dir.timeRangeEnd,
       overallContent: summary.overallContent,
       progress: summary.progress,
-      mainConclusions: summary.mainConclusions,
-      importantChanges: summary.importantChanges,
+      // Normalize — LLM may return strings; Drizzle json mode breaks on raw strings
+      mainConclusions: Array.isArray(summary.mainConclusions) ? summary.mainConclusions : [],
+      importantChanges: Array.isArray(summary.importantChanges) ? summary.importantChanges : [],
     });
 
     // 4. Move the OLDEST HALF of chunk children to new parent.

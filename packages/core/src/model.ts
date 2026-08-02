@@ -83,6 +83,18 @@ export interface DirectoryRelevanceInput {
   intent: string;
 }
 
+/** Input for chunk relevance judgment (summary-first matching) */
+export interface ChunkRelevanceInput {
+  /** AI-generated chunk summary — the window's content description */
+  chunkSummary: string;
+  /** Chunk keywords */
+  chunkKeywords: string[];
+  /** User's original question */
+  question: string;
+  /** Query understanding intent */
+  intent: string;
+}
+
 /** Model interface that Core depends on */
 export interface LynageModel {
   summarizeChunk(input: ChunkSummaryInput): Promise<ChunkSummary>;
@@ -92,4 +104,6 @@ export interface LynageModel {
   analyzeSearchQuery(question: string): Promise<QueryUnderstanding>;
   /** Does this directory's summary semantically relate to the question? */
   isDirectoryRelevant(input: DirectoryRelevanceInput): Promise<boolean>;
+  /** Does this chunk's summary semantically match the question? */
+  isChunkRelevant(input: ChunkRelevanceInput): Promise<boolean>;
 }

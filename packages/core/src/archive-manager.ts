@@ -13,7 +13,7 @@
 
 import type { Message } from "./types.js";
 import type { LynageStore } from "./store.js";
-import type { LynageModel } from "./model.js";
+import type { LynageModel, DirectorySummary } from "./model.js";
 import { findNaturalBoundary } from "./boundary-detector.js";
 import { estimateMessagesTokenCount, estimateTokenCount } from "./token-counter.js";
 import { GenerationCompactor } from "./generation-compactor.js";
@@ -152,7 +152,8 @@ export class ArchiveManager {
         timeRangeEnd: batch[batch.length - 1]!.createdAt,
         summary: summary.summary,
         progress: summary.progress,
-        keywords: summary.keywords,
+        // Normalize — LLM may return non-array; Drizzle json mode breaks
+        keywords: Array.isArray(summary.keywords) ? summary.keywords : [],
         sourceFromId: batch[0]!.id,
         sourceToId: batch[batch.length - 1]!.id,
       });
@@ -198,14 +199,40 @@ export class ArchiveManager {
 
     // 11. Update the G0 directory summary so the parent context actually
     //     reflects the chunk contents (search drill-down matches on this).
+    //     Use LLM summarizeDirectory for a coherent summary (like G1+).
     const allChunks = await this.store.listChunks(sessionId);
-    const dirKeywords = [...new Set(allChunks.flatMap((c) => c.keywords))];
-    const dirSummaries = allChunks.map((c) => c.summary.slice(0, 60));
+    const childDescriptions = allChunks.map((c) => ({
+      id: c.id,
+      type: "chunk" as const,
+      summary: c.summary,
+      progress: c.progress,
+      conclusions: [],
+      keywords: c.keywords,
+    }));
+    let dirSummary: DirectorySummary;
+    try {
+      dirSummary = await this.model.summarizeDirectory({
+        directoryId: g0Dir.id,
+        timeRangeStart: g0Dir.timeRangeStart,
+        timeRangeEnd: g0Dir.timeRangeEnd,
+        childDescriptions,
+      });
+    } catch {
+      // Fallback: keyword aggregation
+      const dirKeywords = [...new Set(allChunks.flatMap((c) => c.keywords))];
+      dirSummary = {
+        overallContent: "Phases covered: " + dirKeywords.slice(0, 30).join(", "),
+        progress: `Archived ${allChunks.length} windows`,
+        mainConclusions: [],
+        importantChanges: [],
+      };
+    }
     await this.store.updateDirectory(g0Dir.id, {
-      overallContent:
-        "Phases covered: " + dirKeywords.slice(0, 30).join(", ") +
-        (dirSummaries.length > 0 ? " | Chunks: " + dirSummaries.join(" | ") : ""),
-      progress: `Archived ${allChunks.length} windows`,
+      overallContent: dirSummary.overallContent,
+      progress: dirSummary.progress,
+      // Normalize — LLM may return strings; Drizzle json mode breaks on raw strings
+      mainConclusions: Array.isArray(dirSummary.mainConclusions) ? dirSummary.mainConclusions : [],
+      importantChanges: Array.isArray(dirSummary.importantChanges) ? dirSummary.importantChanges : [],
     });
 
     // 12. Check generational compaction for all root dirs (M5)

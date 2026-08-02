@@ -41,6 +41,7 @@ export type {
   SearchBatchResult,
   QueryUnderstanding,
   DirectoryRelevanceInput,
+  ChunkRelevanceInput,
 } from "./model.js";
 
 // Schemas & validation

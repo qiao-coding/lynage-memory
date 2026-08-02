@@ -15,6 +15,7 @@ import type {
   SearchBatchResult,
   QueryUnderstanding,
   DirectoryRelevanceInput,
+  ChunkRelevanceInput,
 } from "@lynage/core";
 import {
   ChunkSummarySchema,
@@ -238,6 +239,36 @@ Does this directory's content relate to what the user is looking for? Answer wit
       const terms: string[] = input.question.replace(/[^\w\s一-鿿]/g, " ").split(/\s+/).filter((k) => k.length > 1);
       const summary = input.directorySummary;
       return terms.some((t: string) => summary.includes(t));
+    }
+  }
+
+  /**
+   * Summary-first matching: does this chunk's summary semantically match
+   * the question? Used inside drillDown instead of keyword-only computeRelevance.
+   */
+  async isChunkRelevant(input: ChunkRelevanceInput): Promise<boolean> {
+    const prompt = `You are matching a memory window against a user question.
+
+User question: "${input.question}"
+What the user is looking for: intent=${input.intent}
+
+Window summary (AI-generated):
+"${input.chunkSummary}"
+Window keywords: ${input.chunkKeywords.join(", ")}
+
+Does this window's content match what the user is looking for? Answer with a single word: YES or NO.
+- YES if the window covers the topic/decision/process the user asks about (semantic match, exact words may differ)
+- NO if it's clearly unrelated`;
+
+    try {
+      const text = await generateText({ model: this.model, system: this.systemPrompt, prompt, maxTokens: 10 });
+      const t = text.text.trim().toUpperCase();
+      return t.startsWith("YES");
+    } catch {
+      // Fallback: token overlap with summary + keywords
+      const terms: string[] = input.question.replace(/[^\w\s一-鿿]/g, " ").split(/\s+/).filter((k: string) => k.length > 1);
+      const text = input.chunkSummary + " " + input.chunkKeywords.join(" ");
+      return terms.some((t: string) => text.includes(t));
     }
   }
 }

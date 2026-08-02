@@ -81,6 +81,7 @@ class MockModel implements LynageModel {
   async analyzeSearchBatch() { return { relevantIds: [], reasoning: "", shouldContinue: false }; }
   async analyzeSearchQuery() { return { intent: "decision" as const, description: "test", keywords: ["test"] }; }
   async isDirectoryRelevant() { return true; }
+  async isChunkRelevant() { return true; }
 }
 
 describe("ArchiveManager", () => {

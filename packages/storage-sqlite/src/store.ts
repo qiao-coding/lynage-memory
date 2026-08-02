@@ -176,11 +176,17 @@ export class SqliteStore implements LynageStore {
 
   async getChunksByIds(ids: string[]): Promise<ContextChunk[]> {
     if (ids.length === 0) return [];
-    const rows = await this.db
-      .select()
-      .from(schema.contextChunks)
-      .where(inArray(schema.contextChunks.id, ids));
-    return rows.map((r) => this.toChunk(r));
+    // Chunk into batches of 500 to avoid SQLite's 999-param limit
+    const results: Array<typeof schema.contextChunks.$inferSelect> = [];
+    for (let i = 0; i < ids.length; i += 500) {
+      const batch = ids.slice(i, i + 500);
+      const rows = await this.db
+        .select()
+        .from(schema.contextChunks)
+        .where(inArray(schema.contextChunks.id, batch));
+      results.push(...rows);
+    }
+    return results.map((r) => this.toChunk(r));
   }
 
   async getChunksByDirectory(directoryId: string): Promise<ContextChunk[]> {
@@ -225,8 +231,8 @@ export class SqliteStore implements LynageStore {
       timeRangeEnd: input.timeRangeEnd,
       overallContent: input.overallContent,
       progress: input.progress,
-      mainConclusions: input.mainConclusions,
-      importantChanges: input.importantChanges,
+      mainConclusions: Array.isArray(input.mainConclusions) ? input.mainConclusions : [],
+      importantChanges: Array.isArray(input.importantChanges) ? input.importantChanges : [],
       createdAt: now,
     });
 
@@ -246,21 +252,24 @@ export class SqliteStore implements LynageStore {
     id: string,
     updates: Partial<CreateDirectoryInput>,
   ): Promise<DirectoryNode> {
+    // Use Drizzle (not raw spread) — better-sqlite3 spreads nested arrays,
+    // breaking empty [] json fields with "Too few parameter values".
     const setData: Record<string, unknown> = {};
     if (updates.sessionId !== undefined) setData.sessionId = updates.sessionId;
-    if (updates.parentId !== undefined) setData.parent_id = updates.parentId;
+    if (updates.parentId !== undefined) setData.parentId = updates.parentId;
     if (updates.generation !== undefined) setData.generation = updates.generation;
-    if (updates.timeRangeStart !== undefined) setData.time_range_start = updates.timeRangeStart;
-    if (updates.timeRangeEnd !== undefined) setData.time_range_end = updates.timeRangeEnd;
-    if (updates.overallContent !== undefined) setData.overall_content = updates.overallContent;
+    if (updates.timeRangeStart !== undefined) setData.timeRangeStart = updates.timeRangeStart;
+    if (updates.timeRangeEnd !== undefined) setData.timeRangeEnd = updates.timeRangeEnd;
+    if (updates.overallContent !== undefined) setData.overallContent = updates.overallContent;
     if (updates.progress !== undefined) setData.progress = updates.progress;
-    if (updates.mainConclusions !== undefined) setData.main_conclusions = updates.mainConclusions;
-    if (updates.importantChanges !== undefined) setData.important_changes = updates.importantChanges;
+    if (updates.mainConclusions !== undefined) setData.mainConclusions = Array.isArray(updates.mainConclusions) ? updates.mainConclusions : [];
+    if (updates.importantChanges !== undefined) setData.importantChanges = Array.isArray(updates.importantChanges) ? updates.importantChanges : [];
 
     if (Object.keys(setData).length > 0) {
-      const cols = Object.keys(setData).map((k) => `${k} = ?`).join(", ");
-      const vals = Object.values(setData);
-      this.raw.prepare(`UPDATE directories SET ${cols} WHERE id = ?`).run(...vals, id);
+      await this.db
+        .update(schema.directories)
+        .set(setData as any)
+        .where(eq(schema.directories.id, id));
     }
 
     return (await this.getDirectory(id))!;
