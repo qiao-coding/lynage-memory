@@ -44,6 +44,8 @@ export type {
   ChunkRelevanceInput,
   NavigateDirectoryInput,
   NavigateDirectoryResult,
+  RerankInput,
+  RerankResult,
 } from "./model.js";
 
 // Schemas & validation
@@ -52,6 +54,7 @@ export {
   DirectorySummarySchema,
   SearchBatchResultSchema,
   NavigateDirectoryResultSchema,
+  RerankResultSchema,
   MemoryActionSchema,
   MemoryActionsSchema,
   validateChunkSummary,

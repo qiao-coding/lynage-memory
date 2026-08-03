@@ -113,7 +113,10 @@ for(let i=0;i<questions.length;i++){const q=questions[i]!;
   const l0=performance.now();const an=await ask(`根据对话历史回答，用中文。如果历史中没有明确提到，诚实说不知道，不要猜。\n---\n${cx}\n---\n${q.q}`);tl+=performance.now()-l0;
   ti+=an.input;to+=an.output;
   const j=await judge(q.q,an.text,q.fact,q.wrong);if(j.ok)acc++;if(j.hal)hal++;
-  console.log(`  Q${i+1}: srch=${sr.candidates.length} ${j.ok?"✅":j.hal?"⚠️HAL":"❌"} | ${an.text.slice(0,90)}`);
+  // Diagnostics: candidate summaries — does the process/decision appear?
+  const candInfo=sr.candidates.slice(0,4).map((c:any)=>`${c.summary.slice(0,45)}`.replace(/\n/g," ")).join(" || ");
+  console.log(`  Q${i+1}: srch=${sr.candidates.length} ${j.ok?"✅":j.hal?"⚠️HAL":"❌"} cands=[${candInfo}]`);
+  console.log(`        ans: ${an.text.slice(0,110)}`);
 }
 const ansS=(performance.now()-a0)/1000;const cost=ti*IC+to*OC;
 const treePct=Math.round(treeHits/questions.length*100);

@@ -73,6 +73,7 @@ class MockStore implements LynageStore {
   async searchMessages() { return []; }
   async searchChunks() { return []; }
   async getEstimatedTokenCount() { return 0; }
+  async hasPendingArchive() { return false; }
 }
 
 // ---- Mock Model ----
@@ -84,6 +85,7 @@ class MockModel implements LynageModel {
   async isDirectoryRelevant() { return true; }
   async isChunkRelevant() { return true; }
   async navigateDirectory() { return { relevantChildIds: [], reasoning: "" }; }
+  async rerankCandidates() { return { relevantIds: [], reasoning: "" }; }
 }
 
 describe("ArchiveManager", () => {

@@ -70,10 +70,16 @@ export class ArchiveManager {
     this.sessionBusy.add(sessionId);
     const task = (async () => {
       try {
-        do {
+        // Drain until NO pending archive remains AND no new turns arrived.
+        // The old `while (dirty)` stopped as soon as the (fast) turn loop
+        // ended, leaving most of the conversation unarchived — the archive
+        // must keep going until recent content is below the threshold.
+        let pending = true;
+        while (pending || this.sessionDirty.has(sessionId)) {
           this.sessionDirty.delete(sessionId);
           await this.checkAndArchive(sessionId);
-        } while (this.sessionDirty.has(sessionId));
+          pending = await this.store.hasPendingArchive(sessionId, this.config.tokenThreshold);
+        }
       } catch (err) {
         console.error(`Archiving failed for ${sessionId}:`, err instanceof Error ? err.message : err);
       } finally {

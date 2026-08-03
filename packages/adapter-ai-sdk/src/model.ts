@@ -18,12 +18,15 @@ import type {
   ChunkRelevanceInput,
   NavigateDirectoryInput,
   NavigateDirectoryResult,
+  RerankInput,
+  RerankResult,
 } from "@lynage/core";
 import {
   ChunkSummarySchema,
   DirectorySummarySchema,
   SearchBatchResultSchema,
   NavigateDirectoryResultSchema,
+  RerankResultSchema,
 } from "@lynage/core";
 
 export interface AiSdkModelOptions {
@@ -348,6 +351,54 @@ Determine:
         })
         .map((c) => c.childId);
       return { relevantChildIds, reasoning: "Keyword fallback" };
+    }
+  }
+
+  /**
+   * Semantic rerank of FTS candidates: filters incidental mentions.
+   * FTS matches by keyword frequency — a topic word in passing ("Table组件
+   * 的状态管理方案") outranks the real decision ("关于状态管理的决策过程").
+   * The LLM distinguishes genuine relevance from noise in ONE bounded call.
+   */
+  async rerankCandidates(input: RerankInput): Promise<RerankResult> {
+    const candidatesList = input.candidates
+      .map(
+        (c, i) =>
+          `[${i + 1}] ID: ${c.contextId}\n    Summary: "${c.summary}"\n    Matching message: "${c.messageSnippet ?? c.summary}"\n    Conclusions: ${c.conclusions.join("; ")}\n    Goals: ${c.goals.join("; ")}` +
+          (c.keywords?.length ? `\n    Keywords: ${c.keywords.join(", ")}` : ""),
+      )
+      .join("\n\n");
+
+    const prompt = `You are a precise memory search reranker. A user question matched some conversation-window candidates by keyword — but keyword matches include INCIDENTAL mentions (a topic mentioned in passing) alongside the REAL answer.
+
+User question: "${input.query}"
+Intent: ${input.intent}
+
+Candidates (from keyword search). The "Matching message" is the actual conversation text that matched — use it to judge REAL relevance:
+${candidatesList}
+
+Select ONLY the candidate(s) genuinely about the user's question — the decision/process/content the question asks about. EXCLUDE candidates that merely mention the topic in passing (e.g. a message like "Table组件的状态管理方案" when asking about the state-management DECISION process; the real decision messages say things like "关于状态管理...最后决定用Redux Toolkit").
+
+- relevantIds: IDs genuinely relevant to the question. Empty if none are.
+- reasoning: Brief explanation.`;
+
+    try {
+      return await this.structured(
+        RerankResultSchema,
+        prompt,
+        this.systemPrompt + "\nYou are a precise relevance judge for a memory system.",
+        '\n\nReturn ONLY JSON: {"relevantIds":["..."],"reasoning":"..."}',
+      );
+    } catch {
+      // Fallback: keep candidates whose summary/conclusions contain any query topic term.
+      const terms: string[] = input.query.replace(/[^\w\s一-鿿]/g, " ").split(/\s+/).filter((k: string) => k.length >= 2);
+      const relevantIds = input.candidates
+        .filter((c) => {
+          const text = c.summary + " " + c.conclusions.join(" ") + " " + c.goals.join(" ") + " " + (c.keywords ?? []).join(" ");
+          return terms.some((t: string) => text.includes(t));
+        })
+        .map((c) => c.contextId);
+      return { relevantIds, reasoning: "Keyword fallback" };
     }
   }
 }

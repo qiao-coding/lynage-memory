@@ -83,7 +83,7 @@ export class HistoryRetriever {
     let searchedDirectories = 0;
     let totalChunksChecked = 0;
 
-    const matchedChunkIds = new Set<string>();
+    let matchedChunkIds = new Set<string>();
 
     // ---- Step 1 (PRIMARY, ~6ms): FTS over structured summaries + messages ----
     // Cheap keyword extraction (no LLM) → FTS. Trigram matches topic words
@@ -104,6 +104,7 @@ export class HistoryRetriever {
     // Raw messages are GROUND TRUTH — AI summaries drift (e.g. to English),
     // so a chunk matched by its source messages ranks by message relevance.
     const msgRelevanceByChunk = new Map<string, number>();
+    const bestMsgByChunk = new Map<string, string>();
     const ftsMessages = await this.store.searchMessages(ftsQuery, sessionId);
     if (ftsMessages.length > 0) {
       const chunks = await this.store.listChunks(sessionId);
@@ -113,8 +114,16 @@ export class HistoryRetriever {
         );
         if (hits.length > 0) {
           matchedChunkIds.add(chunk.id);
-          const best = Math.max(...hits.map((m) => computeRelevance(query, m.content, [])));
-          msgRelevanceByChunk.set(chunk.id, Math.max(msgRelevanceByChunk.get(chunk.id) ?? 0, best));
+          let best = 0;
+          let bestText = "";
+          for (const m of hits) {
+            const rel = computeRelevance(query, m.content, []);
+            if (rel > best) { best = rel; bestText = m.content; }
+          }
+          if (best > (msgRelevanceByChunk.get(chunk.id) ?? 0)) {
+            msgRelevanceByChunk.set(chunk.id, best);
+            bestMsgByChunk.set(chunk.id, bestText);
+          }
         }
       }
 
@@ -199,6 +208,39 @@ export class HistoryRetriever {
             matchedChunkIds.add(candidate.contextId);
           }
         }
+      }
+    }
+
+    // ---- Step 2.5 (SEMANTIC RERANK): filter noisy FTS candidates ----
+    // FTS matches by keyword frequency; incidental mentions ("Table组件的
+    // 状态管理方案") can outrank the real decision ("关于状态管理的决策过程").
+    // One bounded LLM call distinguishes genuine relevance from noise.
+    // IMPORTANT: the pool includes ALL matched chunks — a keyword score CANNOT
+    // rank the decision above noise (both tie at 0.25), so pre-filtering by
+    // score would exclude the answer before the LLM ever sees it. Each
+    // candidate carries its BEST MATCHING MESSAGE (ground truth — summaries
+    // drift to English). Pool capped at 40 to bound the prompt.
+    if (matchedChunkIds.size > 1 && this.model.rerankCandidates) {
+      try {
+        const allMatched = await this.store.getChunksByIds([...matchedChunkIds]);
+        const pool = allMatched.slice(0, 40);
+        const rerankResult = await this.model.rerankCandidates({
+          query,
+          intent: "unknown",
+          candidates: pool.map((chunk) => ({
+            contextId: chunk.id,
+            summary: chunk.summary,
+            conclusions: chunk.conclusions ?? [],
+            goals: chunk.goals ?? [],
+            keywords: chunk.keywords,
+            messageSnippet: (bestMsgByChunk.get(chunk.id) ?? chunk.summary).slice(0, 140),
+          })),
+        });
+        if (rerankResult.relevantIds.length > 0) {
+          matchedChunkIds = new Set(rerankResult.relevantIds);
+        }
+      } catch {
+        // Keep original candidates on rerank failure
       }
     }
 

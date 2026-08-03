@@ -74,6 +74,7 @@ class MockStoreForSearch implements LynageStore {
       .map((c) => c.id);
   }
   async getEstimatedTokenCount() { return 0; }
+  async hasPendingArchive() { return false; }
 }
 
 describe("HistoryRetriever", () => {

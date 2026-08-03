@@ -1,0 +1,49 @@
+Lynage forget 10k: 2000 turns, 10 questions
+Storing (async archiving)...
+  2000/2000: 0c 0d 3s
+Store: 1048s 25c 1d
+Tree: 2 levels (max gen 1), 2 dirs
+✅ Multi-level tree built: 25 chunks, gen 1 — navigation is exercised.
+Answering (full context)...
+  Q1: srch=1 ❌ cands=[关于样式方案，我们一开始按主流做法选了CSS Modules。你帮我看看这个方案对我们的场]
+        ans: (api error)
+  Q2: srch=1 ✅ cands=[关于数据库，我们一开始按主流做法选了PostgreSQL。你帮我看看这个方案对我们的场景合]
+        ans: 根据对话历史，数据库方案的过程是：
+
+1. 一开始按主流选了 PostgreSQL。
+2. 试用后发现问题，考虑过 SQLite，但评估后认为 SQLite 也不匹配（并发太弱，且非结构化文档场景不合适）。
+3. 最终评
+  Q3: srch=1 ✅ cands=[关于部署方案，我们一开始按主流做法选了Docker。你帮我看看这个方案对我们的场景合适吗？]
+        ans: 根据对话历史，部署方案的最终决定是：**使用 Vercel**，不用 Docker 也不用自托管服务器。过程是：一开始选了 Docker，试用后有问题；后来考虑自托管服务器，但也不匹配；最终评估后选择了 Vercel。
+  Q4: srch=5 ❌ cands=[Dialog组件正在做国际化工作。这次改动涉及三个核心模块，包括组件的基础样式、交互逻辑和 || Tabs组件的性能优化工作方向正确。这次改动涉及三个核心模块，包括组件的基础样式、交互逻辑 || Tabs组件的重构工作方向正确。这次国际化改造涉及 i18n 资源文件的组织方式。我们决定 || Toast组件的性能优化工作方向正确。这次国际化改造涉及 i18n 资源文件的组织方式。我]
+        ans: 根据对话历史，没有明确提到状态管理的具体决策过程、最初方案、中间变更和最终方案。仅提到过计划引入统一的 reducer 模式，以及参考 Table 组件的状态管理方案，但未说明具体细节。因此无法回答。
+  Q5: srch=1 ✅ cands=[关于认证方案，我们一开始按主流做法选了NextAuth。你帮我看看这个方案对我们的场景合适]
+        ans: 根据对话历史，认证方案的决策过程是：一开始先按主流做法选了 NextAuth，准备试用评估；后来发现有问题，考虑过 Auth0，但 Auth0 也有问题；最终评估后决定使用 Supabase Auth，明确不用 Next
+  Q6: srch=5 ❌ cands=[Dialog组件正在做国际化工作。这次改动涉及三个核心模块，包括组件的基础样式、交互逻辑和 || Table组件正在做国际化工作。这次国际化改造涉及 i18n 资源文件的组织方式。我们决定 || Button组件的性能优化工作方向正确。性能优化方面，当前的瓶颈在列表渲染。当数据量超过一 || Input组件正在做无障碍适配工作。这次改动涉及三个核心模块，包括组件的基础样式、交互逻辑]
+        ans: 关于 Monorepo 的事，在我们的对话历史中完全没有提到过。所以我不清楚当时是怎么定的、是否用过其他方案、中间是否更换过、最终选择了哪个方案。如果你能提供相关背景，我可以再帮你梳理。
+  Q7: srch=1 ✅ cands=[关于测试框架，我们一开始按主流做法选了Vitest。你帮我看看这个方案对我们的场景合适吗？]
+        ans: 根据对话历史，测试框架的选定过程是：
+
+1. 一开始选了 **Vitest**，但用下来有问题。
+2. 后来考虑换 **Jest**，但发现 Jest 也不完全匹配需求；Vitest 主要覆盖单元层，而你们的 UI 交互
+  Q8: srch=1 ✅ cands=[关于路由方案，我们一开始按主流做法选了App Router。你帮我看看这个方案对我们的场景]
+        ans: 根据对话历史，路由方案的决策过程是：一开始选了 App Router，试用后发现问题；后来考虑 React Router，但也不匹配；最终评估后决定用 TanStack Router。
+  Q9: srch=1 ✅ cands=[关于构建工具，我们一开始按主流做法选了Vite。你帮我看看这个方案对我们的场景合适吗？]
+        ans: 根据对话历史，构建工具的决策过程如下：
+
+- **一开始选了 Vite**，作为主流方案先试用评估。
+- **中间考虑过 Webpack**，因为 Vite 用下来有问题，但评估后发现 Webpack 配置太重、也不完全
+  Q10: srch=1 ✅ cands=[关于设计系统，我们一开始按主流做法选了shadcn/ui。你帮我看看这个方案对我们的场景合]
+        ans: 根据对话历史：
+
+- **一开始**：选了 **shadcn/ui**，先搭了一版试用评估。
+- **中间**：因为 shadcn/ui 用下来有问题，考虑过**自建组件库**，但评估后也觉得不合适，两个方案都淘汰了。
+
+
+=======================================================
+Lynage forget results
+Chunks: 25 Dirs: 1
+Accuracy: 7/10 (70%) Hal:0
+Tokens: 16939i+1988o=18927 Cost:¥0.021
+Search: 11ms
+Tree usage: 0/10 searches descended tree (0%) — dirs scanned 0, chunks checked 0

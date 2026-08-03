@@ -37,6 +37,12 @@ export const NavigateDirectoryResultSchema = z.object({
   reasoning: z.string(),
 });
 
+/** Validates a rerankCandidates result (semantic filtering of FTS candidates) */
+export const RerankResultSchema = z.object({
+  relevantIds: z.array(z.string()),
+  reasoning: z.string(),
+});
+
 // ---------------------------------------------------------------------------
 // Memory action — model-proposed write-back (validated before execution)
 // ---------------------------------------------------------------------------

@@ -4,6 +4,16 @@
 
 import { eq, and, gte, lte, gt, desc, asc, count, isNull, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+
+/** Monotonic timestamp — Date.now() collisions at high insert rates orphan
+ * messages (archive cursor uses `createdAt > since`, strict), leaving gaps in
+ * chunk coverage that make decision processes unfindable. */
+let lastTimestamp = 0;
+function monotonicNow(): number {
+  const now = Date.now();
+  lastTimestamp = now > lastTimestamp ? now : lastTimestamp + 1;
+  return lastTimestamp;
+}
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type Database from "better-sqlite3";
 import type {
@@ -46,7 +56,7 @@ export class SqliteStore implements LynageStore {
 
   async appendMessage(input: MessageInput): Promise<Message> {
     const id = randomUUID();
-    const now = Date.now();
+    const now = monotonicNow();
 
     await this.db.insert(schema.messages).values({
       id,
@@ -214,6 +224,13 @@ export class SqliteStore implements LynageStore {
       "SELECT MAX(time_range_end) AS last FROM context_chunks WHERE session_id = ?",
     ).get(sessionId) as { last: number | null } | undefined;
     return row?.last ?? 0;
+  }
+
+  async hasPendingArchive(sessionId: string, thresholdTokens: number): Promise<boolean> {
+    const last = await this.getLastArchiveTime(sessionId);
+    const rows = await this.getRecent({ sessionId, since: last, limit: 200, asc: true });
+    if (rows.length === 0) return false;
+    return estimateMessagesTokenCount(rows) >= thresholdTokens;
   }
 
   // -----------------------------------------------------------------------

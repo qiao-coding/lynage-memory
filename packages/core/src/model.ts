@@ -150,6 +150,31 @@ export interface NavigateDirectoryResult {
   reasoning: string;
 }
 
+/** Input for semantic reranking of FTS candidates */
+export interface RerankInput {
+  /** User's original question */
+  query: string;
+  /** Query understanding intent (from analyzeSearchQuery, or "unknown") */
+  intent: string;
+  /** FTS candidates — may include incidental mentions that drown the real answer */
+  candidates: Array<{
+    contextId: string;
+    summary: string;
+    conclusions: string[];
+    goals: string[];
+    keywords?: string[];
+    /** The candidate's message that matched the query — ground truth text */
+    messageSnippet?: string;
+  }>;
+}
+
+/** Result of semantic reranking */
+export interface RerankResult {
+  /** Candidate ids genuinely about the question (NOT incidental mentions) */
+  relevantIds: string[];
+  reasoning: string;
+}
+
 /** Model interface that Core depends on */
 export interface LynageModel {
   summarizeChunk(input: ChunkSummaryInput): Promise<ChunkSummary>;
@@ -163,4 +188,6 @@ export interface LynageModel {
   isChunkRelevant(input: ChunkRelevanceInput): Promise<boolean>;
   /** Batch-select relevant children from a directory (TOC-style, one LLM call) */
   navigateDirectory?(input: NavigateDirectoryInput): Promise<NavigateDirectoryResult>;
+  /** Semantic rerank of FTS candidates — filters incidental mentions */
+  rerankCandidates?(input: RerankInput): Promise<RerankResult>;
 }

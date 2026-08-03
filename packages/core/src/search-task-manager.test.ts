@@ -57,6 +57,7 @@ class MockStore implements LynageStore {
   async searchMessages() { return []; }
   async searchChunks() { return []; }
   async getEstimatedTokenCount() { return 0; }
+  async hasPendingArchive() { return false; }
 }
 
 describe("SearchTaskManager", () => {
