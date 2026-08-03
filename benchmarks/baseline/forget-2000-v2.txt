@@ -1,3 +1,0 @@
-Lynage forget 10k: 2000 turns, 10 questions
-Storing (async archiving)...
-  2000/2000: 0c 0d 3s
