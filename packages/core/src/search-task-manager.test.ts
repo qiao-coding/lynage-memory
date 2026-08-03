@@ -55,6 +55,7 @@ class MockStore implements LynageStore {
   async getUserMemory() { return null; }
   async upsertUserMemory() { return {} as never; }
   async searchMessages() { return []; }
+  async searchChunks() { return []; }
   async getEstimatedTokenCount() { return 0; }
 }
 

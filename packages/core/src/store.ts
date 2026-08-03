@@ -119,6 +119,8 @@ export interface LynageStore {
 
   // utility
   searchMessages(query: string, sessionId?: string): Promise<Message[]>;
+  /** FTS over chunk structured summaries → chunk ids by bm25 relevance */
+  searchChunks(query: string, sessionId?: string): Promise<string[]>;
   getEstimatedTokenCount(
     sessionId: string,
     sinceId?: string,

@@ -531,6 +531,41 @@ export class SqliteStore implements LynageStore {
     return rawRows.map((r) => this.toMessage(r));
   }
 
+  /**
+   * FTS5 search over chunk structured summaries (summary/keywords/
+   * conclusions/goals). Returns chunk ids ordered by bm25 relevance.
+   * This is the CHEAP retrieval path (~6ms) — no LLM involved.
+   */
+  async searchChunks(query: string, sessionId?: string): Promise<string[]> {
+    const sanitized = query.replace(/[^\w\s一-鿿぀-ゟ゠-ヿ]/g, " ").replace(/\s+/g, " ").trim();
+    if (!sanitized) return [];
+
+    const queryTerms = sanitized.split(/\s+/).filter((t) => t.length > 0);
+    const needLikeFallback = queryTerms.some((t) => t.length < 3);
+
+    if (needLikeFallback) {
+      // Short query (< 3 chars): trigram can't form n-grams → SQL LIKE
+      const cond = queryTerms
+        .map(() => "(summary LIKE ? OR keywords LIKE ? OR conclusions LIKE ? OR goals LIKE ?)")
+        .join(" AND ");
+      const params = queryTerms.flatMap((t) => [`%${t}%`, `%${t}%`, `%${t}%`, `%${t}%`]);
+      const sql = `SELECT id FROM context_chunks WHERE ${cond}${sessionId ? " AND session_id = ?" : ""}`;
+      const rows = this.raw.prepare(sql).all(...params, ...(sessionId ? [sessionId] : [])) as Array<{ id: string }>;
+      return rows.map((r) => r.id);
+    }
+
+    // FTS5 trigram over chunk summaries, joined back to filter by session.
+    const rows = this.raw
+      .prepare(
+        `SELECT c.id FROM context_chunks c
+         JOIN chunks_fts f ON f.rowid = c.rowid
+         WHERE chunks_fts MATCH ?${sessionId ? " AND c.session_id = ?" : ""}
+         ORDER BY bm25(chunks_fts)`,
+      )
+      .all(sanitized, ...(sessionId ? [sessionId] : [])) as Array<{ id: string }>;
+    return rows.slice(0, 100).map((r) => r.id);
+  }
+
   // -----------------------------------------------------------------------
   // Type converters (DB row → domain type)
   // -----------------------------------------------------------------------

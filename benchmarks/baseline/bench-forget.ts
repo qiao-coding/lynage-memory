@@ -24,7 +24,8 @@ const FACTS:[string,string,string,string,string,string][]=[
   ["构建工具","Vite","Webpack","esbuild","Vite 的打包控制粒度不够细，Webpack 配置太重","用自定义 plugin 处理 CSS 提取"],
   ["设计系统","shadcn/ui","自建组件库","Ant Design","shadcn/ui 缺少企业级复杂组件，自建成本太高","用 ConfigProvider 定制设计 token"],
 ];
-const T=10000,QN=FACTS.length;
+// TURNS env override for cheap validation runs; full 10k by default.
+const T=Number(process.env.TURNS)||10000,QN=FACTS.length;
 // Each fact spans 3 consecutive turns
 const factStartTurns:number[]=[];for(let i=0;i<QN;i++)factStartTurns.push(Math.floor((i+1)*T/(QN+1))-1);
 

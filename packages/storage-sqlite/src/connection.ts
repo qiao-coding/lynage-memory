@@ -135,12 +135,12 @@ export function ensureTables(raw: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_directories_session ON directories(session_id);
   `);
 
-  // FTS5: full-text search on messages.content
+  // FTS5: full-text search on messages.content + chunk summaries
   setupFts(raw);
 }
 
 /**
- * Create FTS5 virtual table and sync triggers.
+ * Create FTS5 virtual tables and sync triggers.
  */
 function setupFts(raw: Database.Database): void {
   // Use trigram tokenizer for CJK + Latin support.
@@ -149,6 +149,25 @@ function setupFts(raw: Database.Database): void {
   raw.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
       content,
+      content_rowid='rowid',
+      tokenize='trigram'
+    );
+  `);
+
+  // Chunk summaries FTS: index the structured metadata (summary/keywords/
+  // conclusions/goals) so keyword AND semi-vague queries resolve in ~6ms
+  // without any LLM call. Trigram matches any 3-char substring, so a query
+  // like "我们当时怎么定的数据库方案" hits a conclusion containing "数据库".
+  // Contentless (content=''): the 'delete' special form only works on
+  // contentless/external-content tables — context_chunks gets UPDATE'd by
+  // updateChunkDirectory, so its sync trigger needs valid delete semantics.
+  raw.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+      summary,
+      keywords,
+      conclusions,
+      goals,
+      content='',
       content_rowid='rowid',
       tokenize='trigram'
     );
@@ -173,6 +192,34 @@ function setupFts(raw: Database.Database): void {
     BEGIN
       INSERT INTO messages_fts(messages_fts, rowid, content) VALUES ('delete', old.rowid, old.content);
       INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+    END;
+  `);
+
+  // Chunk summary FTS sync triggers. conclusions/goals are JSON arrays; we
+  // index the raw JSON text (trigram still matches the words inside it).
+  raw.exec(`
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON context_chunks
+    BEGIN
+      INSERT INTO chunks_fts(rowid, summary, keywords, conclusions, goals)
+      VALUES (new.rowid, new.summary, new.keywords, new.conclusions, new.goals);
+    END;
+  `);
+
+  raw.exec(`
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON context_chunks
+    BEGIN
+      INSERT INTO chunks_fts(chunks_fts, rowid, summary, keywords, conclusions, goals)
+      VALUES ('delete', old.rowid, old.summary, old.keywords, old.conclusions, old.goals);
+    END;
+  `);
+
+  raw.exec(`
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON context_chunks
+    BEGIN
+      INSERT INTO chunks_fts(chunks_fts, rowid, summary, keywords, conclusions, goals)
+      VALUES ('delete', old.rowid, old.summary, old.keywords, old.conclusions, old.goals);
+      INSERT INTO chunks_fts(rowid, summary, keywords, conclusions, goals)
+      VALUES (new.rowid, new.summary, new.keywords, new.conclusions, new.goals);
     END;
   `);
 }

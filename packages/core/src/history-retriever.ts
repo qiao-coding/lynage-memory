@@ -83,108 +83,120 @@ export class HistoryRetriever {
     let searchedDirectories = 0;
     let totalChunksChecked = 0;
 
-    // ---- Step 0: Query understanding (semantic tree navigation) ----
-    // LLM turns vague question into search intent. Falls back gracefully
-    // if model doesn't implement it.
-    let understanding: QueryUnderstanding | undefined;
-    if (this.model.analyzeSearchQuery) {
-      try {
-        understanding = await this.model.analyzeSearchQuery(query);
-      } catch { /* fall back to raw query */ }
-    }
-
     const matchedChunkIds = new Set<string>();
 
-    // ---- Step 1 (PRIMARY): Directory drill-down with LLM semantic matching ----
-    // TOC-style navigation: batch-select root directories, then drill into
-    // relevant ones. Each directory level uses one navigateDirectory call.
-    const rootDirs = await this.store.getRootDirectories(sessionId);
-    searchedDirectories = rootDirs.length;
+    // ---- Step 1 (PRIMARY, ~6ms): FTS over structured summaries + messages ----
+    // Cheap keyword extraction (no LLM) → FTS. Trigram matches topic words
+    // inside conclusions/goals, so keyword AND semi-vague queries resolve here
+    // without any LLM call. LLM tree navigation is reserved for queries FTS
+    // cannot match at all.
+    // First clean topic term only — queries usually lead with "关于X", so the
+    // first extracted term is the topic. AND-ing multiple fragment terms kills
+    // recall; a single precise term matches the decision chunk's messages.
+    const ftsQuery = extractKeywords(query)[0] || query;
 
-    if (rootDirs.length > 0) {
-      // Batch-select relevant root directories (one LLM call for all roots)
-      const relevantRootIds = new Set<string>();
+    // 1a. FTS on chunk structured summaries → relevant chunk ids (bm25 order)
+    const ftsChunkIds = await this.store.searchChunks(ftsQuery, sessionId);
+    for (const id of ftsChunkIds) matchedChunkIds.add(id);
 
-      if (this.model.navigateDirectory && understanding) {
-        try {
-          const question = understanding.description || query;
-          const rootChildren = rootDirs.map((d) => ({
-            childId: d.id,
-            childType: "directory" as const,
-            summary: d.overallContent,
-            conclusions: d.mainConclusions,
-            goals: d.goals ?? [],
-          }));
-
-          const navResult = await this.model.navigateDirectory({
-            directoryId: "__root__",
-            overallContent: "Entire conversation history",
-            mainConclusions: [],
-            goals: [],
-            question,
-            intent: understanding.intent,
-            children: rootChildren,
-          });
-
-          for (const id of navResult.relevantChildIds) {
-            relevantRootIds.add(id);
-          }
-        } catch {
-          for (const d of rootDirs) relevantRootIds.add(d.id);
+    // 1b. FTS on raw messages → recall supplement (chunks containing hits +
+    //     unarchived recent messages as direct candidates)
+    // Raw messages are GROUND TRUTH — AI summaries drift (e.g. to English),
+    // so a chunk matched by its source messages ranks by message relevance.
+    const msgRelevanceByChunk = new Map<string, number>();
+    const ftsMessages = await this.store.searchMessages(ftsQuery, sessionId);
+    if (ftsMessages.length > 0) {
+      const chunks = await this.store.listChunks(sessionId);
+      for (const chunk of chunks) {
+        const hits = ftsMessages.filter(
+          (m) => m.createdAt >= chunk.timeRangeStart && m.createdAt <= chunk.timeRangeEnd,
+        );
+        if (hits.length > 0) {
+          matchedChunkIds.add(chunk.id);
+          const best = Math.max(...hits.map((m) => computeRelevance(query, m.content, [])));
+          msgRelevanceByChunk.set(chunk.id, Math.max(msgRelevanceByChunk.get(chunk.id) ?? 0, best));
         }
-      } else {
-        for (const d of rootDirs) relevantRootIds.add(d.id);
       }
 
-      for (const dir of rootDirs) {
-        if (!relevantRootIds.has(dir.id)) continue;
-        const dirResults = await this.drillDown(dir.id, query, understanding);
-        searchedDirectories += dirResults.searched;
-        totalChunksChecked += dirResults.checked;
-
-        for (const candidate of dirResults.candidates) {
-          matchedChunkIds.add(candidate.contextId);
+      const unarchived = ftsMessages.filter(
+        (m) => !chunks.some((c) => m.createdAt >= c.timeRangeStart && m.createdAt <= c.timeRangeEnd),
+      );
+      for (const msg of unarchived.slice(-10)) {
+        const relevance = computeRelevance(query, msg.content, []);
+        if (relevance > 0) {
+          candidates.push({
+            contextId: msg.id,
+            summary: msg.content.slice(0, 100),
+            progress: "",
+            keywords: [],
+            conclusions: [],
+            goals: [],
+            sourceRange: { from: msg.id, to: msg.id },
+            timeRange: { start: msg.createdAt, end: msg.createdAt },
+            relevance,
+          });
         }
       }
     }
 
-    // ---- Step 2 (AUXILIARY): FTS5 keyword search on messages ----
-    // Only when semantic tree navigation found nothing — reinforces gaps.
-    if (matchedChunkIds.size === 0) {
-      const ftsQuery = understanding?.keywords?.length ? understanding.keywords.join(" ") : query;
-      const ftsMessages = await this.store.searchMessages(ftsQuery, sessionId);
+    // ---- Step 2 (FALLBACK, ~28s): LLM semantic tree navigation ----
+    // Only when FTS found NOTHING — fully abstract queries (no topic word any
+    // trigram can match). Unarchived recent messages already pushed to
+    // `candidates` count as results, so they suppress the expensive fallback.
+    if (matchedChunkIds.size === 0 && candidates.length === 0) {
+      let understanding: QueryUnderstanding | undefined;
+      if (this.model.analyzeSearchQuery) {
+        try {
+          understanding = await this.model.analyzeSearchQuery(query);
+        } catch { /* fall back to raw query */ }
+      }
 
-      if (ftsMessages.length > 0) {
-        const chunks = await this.store.listChunks(sessionId);
-        for (const chunk of chunks) {
-          if (
-            ftsMessages.some(
-              (m) => m.createdAt >= chunk.timeRangeStart && m.createdAt <= chunk.timeRangeEnd,
-            )
-          ) {
-            matchedChunkIds.add(chunk.id);
-          }
-        }
-        totalChunksChecked += chunks.length;
+      const rootDirs = await this.store.getRootDirectories(sessionId);
+      searchedDirectories = rootDirs.length;
 
-        // Unarchived recent messages as direct candidates
-        const unarchived = ftsMessages.filter(
-          (m) => !chunks.some((c) => m.createdAt >= c.timeRangeStart && m.createdAt <= c.timeRangeEnd),
-        );
-        for (const msg of unarchived.slice(-10)) {
-          const relevance = computeRelevance(query, msg.content, []);
-          if (relevance > 0) {
-            candidates.push({
-              contextId: msg.id,
-              summary: msg.content.slice(0, 100),
-              progress: "",
-              keywords: [],
-              conclusions: [],
+      if (rootDirs.length > 0) {
+        // Batch-select relevant root directories (one LLM call for all roots)
+        const relevantRootIds = new Set<string>();
+
+        if (this.model.navigateDirectory && understanding) {
+          try {
+            const question = understanding.description || query;
+            const rootChildren = rootDirs.map((d) => ({
+              childId: d.id,
+              childType: "directory" as const,
+              summary: d.overallContent,
+              conclusions: d.mainConclusions,
+              goals: d.goals ?? [],
+            }));
+
+            const navResult = await this.model.navigateDirectory({
+              directoryId: "__root__",
+              overallContent: "Entire conversation history",
+              mainConclusions: [],
               goals: [],
-              sourceRange: { from: msg.id, to: msg.id },
-              timeRange: { start: msg.createdAt, end: msg.createdAt },
-              relevance,
+              question,
+              intent: understanding.intent,
+              children: rootChildren,
             });
+
+            for (const id of navResult.relevantChildIds) {
+              relevantRootIds.add(id);
+            }
+          } catch {
+            for (const d of rootDirs) relevantRootIds.add(d.id);
+          }
+        } else {
+          for (const d of rootDirs) relevantRootIds.add(d.id);
+        }
+
+        for (const dir of rootDirs) {
+          if (!relevantRootIds.has(dir.id)) continue;
+          const dirResults = await this.drillDown(dir.id, query, understanding);
+          searchedDirectories += dirResults.searched;
+          totalChunksChecked += dirResults.checked;
+
+          for (const candidate of dirResults.candidates) {
+            matchedChunkIds.add(candidate.contextId);
           }
         }
       }
@@ -194,8 +206,11 @@ export class HistoryRetriever {
     const matchedChunks = await this.store.getChunksByIds([...matchedChunkIds]);
     for (const chunk of matchedChunks) {
 
-      // Compute relevance score
-      const relevance = computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals);
+      // Compute relevance score: max(summary match, raw-message match).
+      // Summaries drift; a chunk matched by its source messages is ground truth.
+      const summaryRel = computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals);
+      const msgRel = msgRelevanceByChunk.get(chunk.id) ?? 0;
+      const relevance = Math.max(summaryRel, msgRel);
 
       candidates.push({
         contextId: chunk.id,
@@ -539,6 +554,24 @@ export class HistoryRetriever {
 }
 
 // ---- Helpers ----
+
+/**
+ * Cheap CJK/Latin keyword extraction — NO LLM. Strips query fillers and
+ * keeps topic words (≥2 chars) for the FTS fast path. Mirrors the
+ * analyzeSearchQuery LLM fallback, but runs in ~0ms.
+ */
+function extractKeywords(query: string): string[] {
+  // Strip fillers + particles + sentence fragments aggressively, but NEVER
+  // content words like 方案/决定 (part of compound topics "样式方案").
+  // Goal: leave clean 2-6 char topic terms — "关于数据库的事...怎么定的"
+  // → "数据库", NOT fragments like "数据库的事" or "的一开始".
+  const cleaned = query
+    .replace(/[记不清|怎么|定了|最后|哪个|是不是|中间|换了|什么|我们|你们|他们|当时|关于|现在|记得|帮我|看看|以前|之前|后来|然后|已经|到底|结果|回事|真的|应该|可能|觉得|认为|时候|的话|还是|还有|或者|但是|可是|所以|因为|如果|虽然|而且|一开始|一个|一下|一次|这个|那个|这些|那些|别的|用了|的事|的东西|的事情]/g, " ")
+    .replace(/[^\w\s一-鿿぀-ゟ]/g, " ");
+  const terms = cleaned.split(/\s+/).filter((t) => t.length >= 2 && t.length <= 6);
+  // Keep unique, up to 3 terms
+  return [...new Set(terms)].slice(0, 3);
+}
 
 /**
  * Compute a simple relevance score (0-1) between a query and text + keywords.
