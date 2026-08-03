@@ -226,13 +226,6 @@ export class SqliteStore implements LynageStore {
     return row?.last ?? 0;
   }
 
-  async hasPendingArchive(sessionId: string, thresholdTokens: number): Promise<boolean> {
-    const last = await this.getLastArchiveTime(sessionId);
-    const rows = await this.getRecent({ sessionId, since: last, limit: 200, asc: true });
-    if (rows.length === 0) return false;
-    return estimateMessagesTokenCount(rows) >= thresholdTokens;
-  }
-
   // -----------------------------------------------------------------------
   // Directories
   // -----------------------------------------------------------------------

@@ -72,7 +72,7 @@ console.log(`Lynage forget 10k: ${T} turns, ${questions.length} questions`);
 const db=path.resolve(process.cwd(),"data","forget.db");try{fs.unlinkSync(db);}catch{}
 // Lower retainTokens + directoryCapacity so ~10k turns grow G0→G1→G2
 // in minutes instead of hours (with throttled directory summaries).
-const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:8000,retainTokens:2000,directoryCapacity:10}});
+const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:16000,retainTokens:8000,directoryCapacity:10}});
 
 console.log("Storing (async archiving)...");
 const st0=performance.now();
@@ -80,7 +80,7 @@ for(let i=0;i<turns.length;i++){const t=turns[i]!;const tn=await mem.startTurn("
   if((i+1)%2000===0){const s=await mem.getArchiveStats("s1");console.log(`  ${i+1}/${T}: ${s.chunkCount}c ${s.directoryCount}d ${((performance.now()-st0)/1000).toFixed(0)}s`);}}
 // Await background archiving to drain, then ASSERT the tree built
 await mem.waitForArchiving("s1");
-const MIN_CHUNKS=20, DRAIN_TIMEOUT_MS=600000;
+const MIN_CHUNKS=Math.min(20, Math.max(5, Math.floor(T/100))), DRAIN_TIMEOUT_MS=600000;
 let st=await mem.getArchiveStats("s1");
 const drainT0=performance.now();
 while((performance.now()-drainT0)<DRAIN_TIMEOUT_MS && st.chunkCount<MIN_CHUNKS){

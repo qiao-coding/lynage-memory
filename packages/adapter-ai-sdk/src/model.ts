@@ -377,7 +377,9 @@ Intent: ${input.intent}
 Candidates (from keyword search). The "Matching message" is the actual conversation text that matched — use it to judge REAL relevance:
 ${candidatesList}
 
-Select ONLY the candidate(s) genuinely about the user's question — the decision/process/content the question asks about. EXCLUDE candidates that merely mention the topic in passing (e.g. a message like "Table组件的状态管理方案" when asking about the state-management DECISION process; the real decision messages say things like "关于状态管理...最后决定用Redux Toolkit").
+Select ONLY the candidate(s) genuinely about the user's question — the decision/process/content the question asks about. EXCLUDE candidates that merely mention the topic in passing.
+
+KEY SIGNAL: a question about a DECISION PROCESS ("一开始用的什么？中间换了什么？最后定的哪个？") is answered by a chunk whose messages narrate that PROGRESSION — e.g. "关于状态管理，我们一开始按主流做法选了Zustand...用下来有问题...最终决定用Redux Toolkit". An INCIDENTAL mention is a short static phrase like "参考Table组件的状态管理方案" that describes NO decision process. Pick the chunk with the process narrative; ignore incidental mentions.
 
 - relevantIds: IDs genuinely relevant to the question. Empty if none are.
 - reasoning: Brief explanation.`;

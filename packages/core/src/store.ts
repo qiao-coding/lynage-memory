@@ -121,8 +121,6 @@ export interface LynageStore {
   searchMessages(query: string, sessionId?: string): Promise<Message[]>;
   /** FTS over chunk structured summaries → chunk ids by bm25 relevance */
   searchChunks(query: string, sessionId?: string): Promise<string[]>;
-  /** True if unarchived messages since last archive exceed the token threshold */
-  hasPendingArchive(sessionId: string, thresholdTokens: number): Promise<boolean>;
   getEstimatedTokenCount(
     sessionId: string,
     sinceId?: string,

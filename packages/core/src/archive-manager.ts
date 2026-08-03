@@ -21,10 +21,13 @@ import { GenerationCompactor } from "./generation-compactor.js";
 export interface ArchiveConfig {
   /** Token threshold to trigger archiving */
   tokenThreshold: number;
-  /** Tokens to retain after archiving */
+  /** Tokens to retain after archiving (also the archive gate — archive when
+   * more than this is pending). Bigger = fewer, richer chunks = fewer AI calls. */
   retainTokens: number;
   /** Max children per G0 directory before compaction warning */
   directoryCapacity: number;
+  /** Messages fetched per archive pass. Higher = fewer passes (throughput). */
+  fetchLimit?: number;
 }
 
 export interface ArchiveResult {
@@ -70,15 +73,15 @@ export class ArchiveManager {
     this.sessionBusy.add(sessionId);
     const task = (async () => {
       try {
-        // Drain until NO pending archive remains AND no new turns arrived.
-        // The old `while (dirty)` stopped as soon as the (fast) turn loop
-        // ended, leaving most of the conversation unarchived — the archive
-        // must keep going until recent content is below the threshold.
-        let pending = true;
-        while (pending || this.sessionDirty.has(sessionId)) {
+        // Drain until archiving stops making progress AND no new turns arrived.
+        // `progress` = checkAndArchive actually archived something. Continues
+        // past the fast turn loop ending (the old `while (dirty)` stopped early,
+        // leaving most of the conversation unarchived), and stops safely when
+        // recent <= retainTokens (nothing beyond the working-memory window).
+        let progress = true;
+        while (progress || this.sessionDirty.has(sessionId)) {
           this.sessionDirty.delete(sessionId);
-          await this.checkAndArchive(sessionId);
-          pending = await this.store.hasPendingArchive(sessionId, this.config.tokenThreshold);
+          progress = (await this.checkAndArchive(sessionId)).archived;
         }
       } catch (err) {
         console.error(`Archiving failed for ${sessionId}:`, err instanceof Error ? err.message : err);
@@ -103,20 +106,22 @@ export class ArchiveManager {
     const lastArchiveTime = await this.store.getLastArchiveTime(sessionId);
 
     // 1. Get only messages newer than the last archive.
-    //    Traverse OLDEST-first from the cursor so ALL unarchived messages
-    //    get covered — not just the most recent 100. Batch of 200 per pass.
+    //    Traverse OLDEST-first from the cursor. fetchLimit (default 2000) lets
+    //    each pass cover a large window → few passes → less per-pass latency.
     const recent = await this.store.getRecent({
       sessionId,
       since: lastArchiveTime,
-      limit: 200,
+      limit: this.config.fetchLimit ?? 2000,
       asc: true,
     });
 
     // 2. Compute token estimate
     const totalTokens = estimateMessagesTokenCount(recent);
 
-    // 3. Below threshold — skip
-    if (totalTokens < this.config.tokenThreshold) {
+    // 3. Below retain threshold — nothing beyond the working-memory window.
+    //    Gate on retainTokens (not tokenThreshold) so the drain loop and the
+    //    gate agree — no dead zone where recent is stuck between them.
+    if (totalTokens <= this.config.retainTokens) {
       return { archived: false, keptMessageCount: recent.length, archivedMessageCount: 0 };
     }
 
@@ -141,7 +146,7 @@ export class ArchiveManager {
     // 7. Split into chunk-sized batches (~4000 tokens each) and summarize
     //    in PARALLEL — this is the throughput bottleneck (AI call ~3-5s each).
     const batches = splitByTokens(toArchive, this.config.retainTokens);
-    const CONCURRENCY = 4;
+    const CONCURRENCY = 8;
     const summaries: ChunkSummary[] = [];
     for (let i = 0; i < batches.length; i += CONCURRENCY) {
       const slice = batches.slice(i, i + CONCURRENCY);

@@ -223,7 +223,10 @@ export class HistoryRetriever {
     if (matchedChunkIds.size > 1 && this.model.rerankCandidates) {
       try {
         const allMatched = await this.store.getChunksByIds([...matchedChunkIds]);
-        const pool = allMatched.slice(0, 40);
+        // Pool must cover ALL matched chunks — at extreme noise a topic word can
+        // appear in 98% of chunks, and the decision chunk is one of them. A
+        // keyword score can't rank it higher, so a small cap excludes the answer.
+        const pool = allMatched.slice(0, 100);
         const rerankResult = await this.model.rerankCandidates({
           query,
           intent: "unknown",

@@ -150,6 +150,8 @@ export interface LynageConfig {
   retainTokens: number;
   /** Max children per directory before generation compaction (default 20) */
   directoryCapacity: number;
+  /** Messages fetched per archive pass — higher = fewer passes (default 2_000) */
+  archiveFetchLimit?: number;
 }
 
 export const DEFAULT_CONFIG: LynageConfig = {

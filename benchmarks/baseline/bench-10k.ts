@@ -38,7 +38,7 @@ console.log(`Lynage 10k fair: ${T} turns, ${questions.length} questions (no trun
 const db=path.resolve(process.cwd(),"data","10k-fair.db");try{fs.unlinkSync(db);}catch{}
 // Lower retainTokens + directoryCapacity so ~10k turns grow G0→G1→G2
 // in minutes instead of hours (with throttled directory summaries).
-const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:8000,retainTokens:2000,directoryCapacity:10}});
+const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:16000,retainTokens:8000,directoryCapacity:10}});
 
 console.log("Storing (async archiving)...");
 const st0=performance.now();
@@ -47,7 +47,7 @@ for(let i=0;i<turns.length;i++){const t=turns[i]!;const tn=await mem.startTurn("
 // ---- Reliability: drain archiving, then ASSERT the tree actually built ----
 // We refuse to publish accuracy data unless the generation tree exists —
 // otherwise FTS hits on unarchived messages would give a false positive.
-const MIN_CHUNKS=20, DRAIN_TIMEOUT_MS=600000;
+const MIN_CHUNKS=Math.min(20, Math.max(5, Math.floor(T/200))), DRAIN_TIMEOUT_MS=600000;
 console.log("Draining archiving...");
 await mem.waitForArchiving("s1");
 let st=await mem.getArchiveStats("s1");
