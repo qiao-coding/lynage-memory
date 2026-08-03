@@ -53,7 +53,7 @@ class MockStore implements LynageStore {
     const d = this.dirs.get(id); if (d) Object.assign(d as unknown as Record<string, unknown>, updates);
     return this.dirs.get(id)!;
   }
-  async getRootDirectories(sessionId: string) { return Array.from(this.dirs.values()).filter(d => d.sessionId === sessionId && d.generation === 0); }
+  async getRootDirectories(sessionId: string) { return Array.from(this.dirs.values()).filter(d => d.sessionId === sessionId && (d.parentId == null)); }
   async getChildDirectories() { return []; }
   async addChildToDirectory(child: DirectoryChild) {
     const list = this.children.get(child.directoryId) ?? []; list.push(child); this.children.set(child.directoryId, list);
@@ -77,11 +77,12 @@ class MockStore implements LynageStore {
 // ---- Mock Model ----
 class MockModel implements LynageModel {
   async summarizeChunk() { return { summary: "Test summary", progress: "Test progress", keywords: ["test"] } as ChunkSummary; }
-  async summarizeDirectory() { return { overallContent: "Test content", progress: "Test progress", mainConclusions: ["Test conclusion"], importantChanges: [] } as DirectorySummary; }
+  async summarizeDirectory() { return { overallContent: "Test content", progress: "Test progress", mainConclusions: ["Test conclusion"], importantChanges: [], goals: [] } as DirectorySummary; }
   async analyzeSearchBatch() { return { relevantIds: [], reasoning: "", shouldContinue: false }; }
   async analyzeSearchQuery() { return { intent: "decision" as const, description: "test", keywords: ["test"] }; }
   async isDirectoryRelevant() { return true; }
   async isChunkRelevant() { return true; }
+  async navigateDirectory() { return { relevantChildIds: [], reasoning: "" }; }
 }
 
 describe("ArchiveManager", () => {
@@ -129,7 +130,9 @@ describe("ArchiveManager", () => {
 
     const dirs = await store.getRootDirectories("s1");
     expect(dirs.length).toBe(1);
-    expect(dirs[0]!.generation).toBe(0);
+    // Root is identified by parentId null — may be G0 or already-elevated G1
+    // if the first archive pass filled the capacity and compacted.
+    expect(dirs[0]!.parentId).toBeUndefined();
   });
 
   it("adds chunk as child of G0 directory", async () => {

@@ -34,6 +34,8 @@ export const contextChunks = sqliteTable("context_chunks", {
   summary: text("summary").notNull().default(""),
   progress: text("progress").notNull().default(""),
   keywords: text("keywords", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  conclusions: text("conclusions", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  goals: text("goals", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
   sourceFromId: text("source_from_id").notNull(),
   sourceToId: text("source_to_id").notNull(),
   directoryId: text("directory_id"),
@@ -55,6 +57,7 @@ export const directories = sqliteTable("directories", {
   progress: text("progress").notNull().default(""),
   mainConclusions: text("main_conclusions", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
   importantChanges: text("important_changes", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  goals: text("goals", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
   createdAt: integer("created_at").notNull(),
 });
 

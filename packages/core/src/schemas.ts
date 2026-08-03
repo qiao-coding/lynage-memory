@@ -10,6 +10,8 @@ export const ChunkSummarySchema = z.object({
   summary: z.string().min(1, "Summary must not be empty"),
   progress: z.string().min(1, "Progress must not be empty"),
   keywords: z.array(z.string()).min(1, "At least one keyword required"),
+  conclusions: z.array(z.string()).default([]),
+  goals: z.array(z.string()).default([]),
 });
 
 /** Validates a directory summary from the AI model */
@@ -18,6 +20,7 @@ export const DirectorySummarySchema = z.object({
   progress: z.string().min(1, "Progress must not be empty"),
   mainConclusions: z.array(z.string()),
   importantChanges: z.array(z.string()),
+  goals: z.array(z.string()).default([]),
 });
 
 /** Validates a search batch result from the AI model */
@@ -26,6 +29,12 @@ export const SearchBatchResultSchema = z.object({
   reasoning: z.string(),
   shouldContinue: z.boolean(),
   refinedUnderstanding: z.string().optional(),
+});
+
+/** Validates a navigateDirectory result (TOC-style child selection) */
+export const NavigateDirectoryResultSchema = z.object({
+  relevantChildIds: z.array(z.string()),
+  reasoning: z.string(),
 });
 
 // ---------------------------------------------------------------------------

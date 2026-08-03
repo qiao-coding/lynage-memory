@@ -11,11 +11,15 @@ export interface ChunkSummaryInput {
   recentMemory?: string;
 }
 
-/** AI-generated chunk summary */
+/** AI-generated chunk summary — structured for semantic navigation */
 export interface ChunkSummary {
   summary: string;
   progress: string;
   keywords: string[];
+  /** Concrete conclusions reached in this window (decisions, outcomes) */
+  conclusions: string[];
+  /** Goals / what this window aimed to accomplish */
+  goals: string[];
 }
 
 /** Input for directory summary generation */
@@ -34,12 +38,14 @@ export interface DirectorySummaryInput {
   }>;
 }
 
-/** AI-generated directory summary */
+/** AI-generated directory summary — the parent context that guides navigation */
 export interface DirectorySummary {
   overallContent: string;
   progress: string;
   mainConclusions: string[];
   importantChanges: string[];
+  /** Aggregated goals across child windows */
+  goals: string[];
 }
 
 /** Input for batch search analysis */
@@ -75,8 +81,14 @@ export interface QueryUnderstanding {
 
 /** Input for directory relevance judgment (semantic tree navigation) */
 export interface DirectoryRelevanceInput {
-  /** Directory summary — the parent context that guides navigation */
-  directorySummary: string;
+  /** Directory overview — what this phase covers */
+  overallContent: string;
+  /** Key conclusions reached in this directory's windows */
+  mainConclusions: string[];
+  /** Important changes in direction or abandoned approaches */
+  importantChanges: string[];
+  /** Aggregated goals across child windows */
+  goals: string[];
   /** User's original question */
   question: string;
   /** Query understanding intent */
@@ -89,10 +101,53 @@ export interface ChunkRelevanceInput {
   chunkSummary: string;
   /** Chunk keywords */
   chunkKeywords: string[];
+  /** Concrete conclusions reached in this window */
+  chunkConclusions: string[];
+  /** Goals of this window */
+  chunkGoals: string[];
   /** User's original question */
   question: string;
   /** Query understanding intent */
   intent: string;
+}
+
+/** Input for batch child selection (TOC-style navigation) */
+export interface NavigateDirectoryInput {
+  /** Directory ID being navigated (use "__root__" for virtual root) */
+  directoryId: string;
+  /** Directory overview */
+  overallContent: string;
+  /** Key conclusions from this directory's windows */
+  mainConclusions: string[];
+  /** Aggregated goals */
+  goals: string[];
+  /** Parent directory breadcrumb — guides recursive navigation (null at root) */
+  parentContext?: {
+    overallContent: string;
+    mainConclusions: string[];
+    goals: string[];
+  };
+  /** User's original question */
+  question: string;
+  /** Query understanding intent */
+  intent: string;
+  /** All children — like a book's table of contents */
+  children: Array<{
+    childId: string;
+    childType: "chunk" | "directory";
+    summary: string;
+    conclusions: string[];
+    goals: string[];
+    keywords?: string[];
+  }>;
+}
+
+/** Result of TOC-style navigation */
+export interface NavigateDirectoryResult {
+  /** Which child IDs are relevant */
+  relevantChildIds: string[];
+  /** Why those were selected */
+  reasoning: string;
 }
 
 /** Model interface that Core depends on */
@@ -106,4 +161,6 @@ export interface LynageModel {
   isDirectoryRelevant(input: DirectoryRelevanceInput): Promise<boolean>;
   /** Does this chunk's summary semantically match the question? */
   isChunkRelevant(input: ChunkRelevanceInput): Promise<boolean>;
+  /** Batch-select relevant children from a directory (TOC-style, one LLM call) */
+  navigateDirectory?(input: NavigateDirectoryInput): Promise<NavigateDirectoryResult>;
 }

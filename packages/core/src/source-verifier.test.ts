@@ -53,6 +53,8 @@ function makeCandidate(overrides: Partial<SearchCandidate> = {}): SearchCandidat
     summary: "Discussed architecture decisions",
     progress: "Phase 1 complete",
     keywords: ["architecture", "decision"],
+    conclusions: [],
+    goals: [],
     sourceRange: { from: "m1", to: "m3" },
     timeRange: { start: 1000, end: 2000 },
     relevance: 0.8,

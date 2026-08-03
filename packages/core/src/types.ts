@@ -44,6 +44,10 @@ export interface ContextChunk {
   summary: string;
   progress: string;
   keywords: string[];
+  /** Concrete conclusions reached in this window (for semantic navigation) */
+  conclusions?: string[];
+  /** Goals of this window */
+  goals?: string[];
   sourceFromId: string;
   sourceToId: string;
   directoryId?: string;
@@ -62,6 +66,8 @@ export interface DirectoryNode {
   progress: string;
   mainConclusions: string[];
   importantChanges: string[];
+  /** Aggregated goals across child windows */
+  goals?: string[];
   createdAt: number;
 }
 

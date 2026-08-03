@@ -69,23 +69,43 @@ async function judge(q:string,ans:string,f:string,w:string[]){const p=`你是严
 async function main(){
 console.log(`Lynage forget 10k: ${T} turns, ${questions.length} questions`);
 const db=path.resolve(process.cwd(),"data","forget.db");try{fs.unlinkSync(db);}catch{}
-const mem=createLynageMemory({model:new AiSdkModel(m),dbPath:db,config:{archiveThreshold:8000,retainTokens:4000,directoryCapacity:20}});
+// Lower retainTokens + directoryCapacity so ~10k turns grow G0→G1→G2
+// in minutes instead of hours (with throttled directory summaries).
+const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:8000,retainTokens:2000,directoryCapacity:10}});
 
 console.log("Storing (async archiving)...");
 const st0=performance.now();
 for(let i=0;i<turns.length;i++){const t=turns[i]!;const tn=await mem.startTurn("s1","u1",t.u);await tn.finish({response:t.a});
   if((i+1)%2000===0){const s=await mem.getArchiveStats("s1");console.log(`  ${i+1}/${T}: ${s.chunkCount}c ${s.directoryCount}d ${((performance.now()-st0)/1000).toFixed(0)}s`);}}
-// Await background archiving to drain (NOT polling)
+// Await background archiving to drain, then ASSERT the tree built
 await mem.waitForArchiving("s1");
-const st=await mem.getArchiveStats("s1");
+const MIN_CHUNKS=20, DRAIN_TIMEOUT_MS=600000;
+let st=await mem.getArchiveStats("s1");
+const drainT0=performance.now();
+while((performance.now()-drainT0)<DRAIN_TIMEOUT_MS && st.chunkCount<MIN_CHUNKS){
+  await new Promise(r=>setTimeout(r,3000));
+  st=await mem.getArchiveStats("s1");
+}
 const stS=(performance.now()-st0)/1000;
 console.log(`Store: ${stS.toFixed(0)}s ${st.chunkCount}c ${st.directoryCount}d`);
+// Assert a multi-level generation tree (G0→G1+) formed, not flat G0.
+const tree=await mem.getDirectoryTree("s1");
+let maxGen=0,totalDirs=0;
+(function walk(ns:any[]){for(const n of ns){totalDirs++;if(n.generation>maxGen)maxGen=n.generation;walk(n.children);}})(tree);
+console.log(`Tree: ${maxGen+1} levels (max gen ${maxGen}), ${totalDirs} dirs`);
+if(st.chunkCount<MIN_CHUNKS||maxGen<1){
+  console.error(`❌ TREE NOT BUILT (chunks=${st.chunkCount} < ${MIN_CHUNKS} OR maxGen=${maxGen} < 1). Refusing to publish results.`);
+  process.exit(1);
+}
+console.log(`✅ Multi-level tree built: ${st.chunkCount} chunks, gen ${maxGen} — navigation is exercised.`);
 
 console.log("Answering (full context)...");
-let acc=0,hal=0,ti=0,to=0,ts=0,tl=0;const a0=performance.now();
+let acc=0,hal=0,ti=0,to=0,ts=0,tl=0,treeHits=0,searchedDirs=0,checkedChunks=0;const a0=performance.now();
 for(let i=0;i<questions.length;i++){const q=questions[i]!;
   // Full vague question as search input — system extracts its own keywords
   const s0=performance.now();const sr=await mem.search({query:q.q,sessionId:"s1"});ts+=performance.now()-s0;
+  searchedDirs+=sr.searchedDirectories;checkedChunks+=sr.totalChunksChecked;
+  if(sr.totalChunksChecked>0)treeHits++;
   let msgs:any[]=[];
   for(let ci=0;ci<Math.min(sr.candidates.length,4);ci++){const or=await mem.openSource(sr.candidates[ci]!.contextId);if(or)msgs.push(...or.messages);}
   const cx=msgs.map((x:any)=>`[${x.role}] ${x.content}`).join("\n");
@@ -95,13 +115,15 @@ for(let i=0;i<questions.length;i++){const q=questions[i]!;
   console.log(`  Q${i+1}: srch=${sr.candidates.length} ${j.ok?"✅":j.hal?"⚠️HAL":"❌"} | ${an.text.slice(0,90)}`);
 }
 const ansS=(performance.now()-a0)/1000;const cost=ti*IC+to*OC;
+const treePct=Math.round(treeHits/questions.length*100);
 console.log(`\n${"=".repeat(55)}`);
 console.log(`Lynage forget results`);
 console.log(`Chunks: ${st.chunkCount} Dirs: ${st.directoryCount}`);
 console.log(`Accuracy: ${acc}/${questions.length} (${(acc/questions.length*100).toFixed(0)}%) Hal:${hal}`);
 console.log(`Tokens: ${ti}i+${to}o=${ti+to} Cost:¥${cost.toFixed(3)}`);
 console.log(`Search: ${(ts/questions.length).toFixed(0)}ms`);
-const out={system:"Lynage",turns:T,questions:questions.length,accuracy:acc/questions.length,correct:acc,hallucination:hal,total_input:ti,total_output:to,cost_cny:cost,avg_search_ms:ts/questions.length,store_s:stS,answer_s:ansS,chunks:st.chunkCount,dirs:st.directoryCount};
+console.log(`Tree usage: ${treeHits}/${questions.length} searches descended tree (${treePct}%) — dirs scanned ${searchedDirs}, chunks checked ${checkedChunks}`);
+const out={system:"Lynage",turns:T,questions:questions.length,accuracy:acc/questions.length,correct:acc,hallucination:hal,total_input:ti,total_output:to,cost_cny:cost,avg_search_ms:ts/questions.length,store_s:stS,answer_s:ansS,chunks:st.chunkCount,dirs:st.directoryCount,tree_usage_pct:treePct,dirs_scanned:searchedDirs,chunks_checked:checkedChunks};
 fs.writeFileSync(path.resolve(process.cwd(),"data","forget_lynage.json"),JSON.stringify(out,null,2));
 try{fs.unlinkSync(db);}catch{}
 }main().catch(console.error);

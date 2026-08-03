@@ -27,7 +27,7 @@ class MockStore implements LynageStore {
     return this.searchTasks.get(id)!;
   }
   async getSearchTask(id: string) { return this.searchTasks.get(id) ?? null; }
-  async getRootDirectories() { return Array.from(this.dirs.values()).filter(d => d.generation === 0); }
+  async getRootDirectories() { return Array.from(this.dirs.values()).filter(d => d.parentId == null); }
   async getDirectory(id: string) { return this.dirs.get(id) ?? null; }
   async getDirectoryChildren() { return []; }
 

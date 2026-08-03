@@ -34,7 +34,7 @@ class MockStoreForSearch implements LynageStore {
   async getDirectory(id: string) { return this.dirs.get(id) ?? null; }
   async updateDirectory() { return {} as DirectoryNode; }
   async getRootDirectories() {
-    return Array.from(this.dirs.values()).filter((d) => d.generation === 0);
+    return Array.from(this.dirs.values()).filter((d) => d.parentId == null);
   }
   async getChildDirectories(parentId: string) {
     const childIds = this.children.get(parentId) ?? [];
@@ -152,6 +152,8 @@ describe("HistoryRetriever", () => {
           summary: "Architecture decision",
           progress: "Phase complete",
           keywords: ["architecture", "decision"],
+          conclusions: [],
+          goals: [],
           sourceRange: { from: "m1", to: "m2" },
           timeRange: { start: 1000, end: 2000 },
           relevance: 0.8,

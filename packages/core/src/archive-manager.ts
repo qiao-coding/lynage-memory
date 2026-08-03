@@ -13,7 +13,7 @@
 
 import type { Message } from "./types.js";
 import type { LynageStore } from "./store.js";
-import type { LynageModel, DirectorySummary } from "./model.js";
+import type { LynageModel, DirectorySummary, ChunkSummary } from "./model.js";
 import { findNaturalBoundary } from "./boundary-detector.js";
 import { estimateMessagesTokenCount, estimateTokenCount } from "./token-counter.js";
 import { GenerationCompactor } from "./generation-compactor.js";
@@ -44,6 +44,10 @@ export class ArchiveManager {
   private sessionBusy = new Set<string>();
   private sessionDirty = new Set<string>();
   private sessionTask = new Map<string, Promise<void>>();
+  /** Per-session archive pass counter — throttles full directory re-summarization */
+  private sessionPass = new Map<string, number>();
+  /** Full directory re-summarization frequency (every K archive passes) */
+  private static readonly DIR_SUMMARY_EVERY = 5;
 
   constructor(store: LynageStore, model: LynageModel, config: ArchiveConfig) {
     this.store = store;
@@ -132,7 +136,7 @@ export class ArchiveManager {
     //    in PARALLEL — this is the throughput bottleneck (AI call ~3-5s each).
     const batches = splitByTokens(toArchive, this.config.retainTokens);
     const CONCURRENCY = 4;
-    const summaries: Array<{ summary: string; progress: string; keywords: string[] }> = [];
+    const summaries: ChunkSummary[] = [];
     for (let i = 0; i < batches.length; i += CONCURRENCY) {
       const slice = batches.slice(i, i + CONCURRENCY);
       const results = await Promise.all(
@@ -154,6 +158,8 @@ export class ArchiveManager {
         progress: summary.progress,
         // Normalize — LLM may return non-array; Drizzle json mode breaks
         keywords: Array.isArray(summary.keywords) ? summary.keywords : [],
+        conclusions: Array.isArray(summary.conclusions) ? summary.conclusions : [],
+        goals: Array.isArray(summary.goals) ? summary.goals : [],
         sourceFromId: batch[0]!.id,
         sourceToId: batch[batch.length - 1]!.id,
       });
@@ -200,32 +206,62 @@ export class ArchiveManager {
     // 11. Update the G0 directory summary so the parent context actually
     //     reflects the chunk contents (search drill-down matches on this).
     //     Use LLM summarizeDirectory for a coherent summary (like G1+).
-    const allChunks = await this.store.listChunks(sessionId);
-    const childDescriptions = allChunks.map((c) => ({
-      id: c.id,
-      type: "chunk" as const,
-      summary: c.summary,
-      progress: c.progress,
-      conclusions: [],
-      keywords: c.keywords,
-    }));
+    //
+    //     THROTTLED: full LLM re-summarization over ALL chunks is O(N²) as
+    //     chunks grow. Only do it every DIR_SUMMARY_EVERY passes; intermediate
+    //     passes cheaply merge the NEW chunks' keywords/conclusions into the
+    //     existing summary.
+    const pass = (this.sessionPass.get(sessionId) ?? 0) + 1;
+    this.sessionPass.set(sessionId, pass);
+
     let dirSummary: DirectorySummary;
-    try {
-      dirSummary = await this.model.summarizeDirectory({
-        directoryId: g0Dir.id,
-        timeRangeStart: g0Dir.timeRangeStart,
-        timeRangeEnd: g0Dir.timeRangeEnd,
-        childDescriptions,
-      });
-    } catch {
-      // Fallback: keyword aggregation
-      const dirKeywords = [...new Set(allChunks.flatMap((c) => c.keywords))];
-      dirSummary = {
-        overallContent: "Phases covered: " + dirKeywords.slice(0, 30).join(", "),
-        progress: `Archived ${allChunks.length} windows`,
-        mainConclusions: [],
+    if (pass % ArchiveManager.DIR_SUMMARY_EVERY === 0) {
+      const allChunks = await this.store.listChunks(sessionId);
+      const childDescriptions = allChunks.map((c) => ({
+        id: c.id,
+        type: "chunk" as const,
+        summary: c.summary,
+        progress: c.progress,
+        conclusions: c.conclusions ?? [],
         importantChanges: [],
+        keywords: c.keywords,
+        // DirectorySummaryInput has no goals field on child; pass via keywords extra
+      }));
+      try {
+        dirSummary = await this.model.summarizeDirectory({
+          directoryId: g0Dir.id,
+          timeRangeStart: g0Dir.timeRangeStart,
+          timeRangeEnd: g0Dir.timeRangeEnd,
+          childDescriptions,
+        });
+      } catch {
+        // Fallback: keyword aggregation
+        const dirKeywords = [...new Set(allChunks.flatMap((c) => c.keywords))];
+        const dirConclusions = [...new Set(allChunks.flatMap((c) => c.conclusions ?? []))];
+        dirSummary = {
+          overallContent: "Phases covered: " + dirKeywords.slice(0, 30).join(", "),
+          progress: `Archived ${allChunks.length} windows`,
+          mainConclusions: dirConclusions.slice(0, 20),
+          importantChanges: [],
+          goals: [],
+        };
+      }
+    } else {
+      // Cheap incremental merge: fold NEW chunks' conclusions/goals/keywords
+      // into the existing summary. No AI call, no O(N) re-scan.
+      const newConclusions = [...new Set(chunks.flatMap((c) => c.conclusions ?? []))];
+      const newGoals = [...new Set(chunks.flatMap((c) => c.goals ?? []))];
+      const newKeywords = [...new Set(chunks.flatMap((c) => c.keywords))];
+      dirSummary = {
+        overallContent: g0Dir.overallContent,
+        progress: g0Dir.progress,
+        mainConclusions: [...new Set([...g0Dir.mainConclusions, ...newConclusions])].slice(0, 20),
+        importantChanges: g0Dir.importantChanges,
+        goals: [...new Set([...g0Dir.goals ?? [], ...newGoals])].slice(0, 20),
       };
+      if (newKeywords.length > 0) {
+        dirSummary.overallContent += " [recent: " + newKeywords.slice(0, 8).join(", ") + "]";
+      }
     }
     await this.store.updateDirectory(g0Dir.id, {
       overallContent: dirSummary.overallContent,
@@ -233,6 +269,7 @@ export class ArchiveManager {
       // Normalize — LLM may return strings; Drizzle json mode breaks on raw strings
       mainConclusions: Array.isArray(dirSummary.mainConclusions) ? dirSummary.mainConclusions : [],
       importantChanges: Array.isArray(dirSummary.importantChanges) ? dirSummary.importantChanges : [],
+      goals: Array.isArray(dirSummary.goals) ? dirSummary.goals : [],
     });
 
     // 12. Check generational compaction for all root dirs (M5)

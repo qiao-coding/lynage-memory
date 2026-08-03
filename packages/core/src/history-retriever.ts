@@ -25,9 +25,11 @@ export interface DirectoryContext {
   directoryId: string; generation: number;
   overallContent: string; progress: string;
   mainConclusions: string[]; importantChanges: string[];
+  goals: string[];
 }
 export interface SearchCandidate {
   contextId: string; summary: string; progress: string; keywords: string[];
+  conclusions: string[]; goals: string[];
   sourceRange: { from: string; to: string };
   timeRange: { start: number; end: number };
   relevance: number;
@@ -94,18 +96,55 @@ export class HistoryRetriever {
     const matchedChunkIds = new Set<string>();
 
     // ---- Step 1 (PRIMARY): Directory drill-down with LLM semantic matching ----
-    // Summary-first tree navigation: LLM judges directory/chunk summaries
-    // against the question, descends relevant branches, locates windows.
+    // TOC-style navigation: batch-select root directories, then drill into
+    // relevant ones. Each directory level uses one navigateDirectory call.
     const rootDirs = await this.store.getRootDirectories(sessionId);
     searchedDirectories = rootDirs.length;
 
-    for (const dir of rootDirs) {
-      const dirResults = await this.drillDown(dir.id, query, understanding);
-      searchedDirectories += dirResults.searched;
-      totalChunksChecked += dirResults.checked;
+    if (rootDirs.length > 0) {
+      // Batch-select relevant root directories (one LLM call for all roots)
+      const relevantRootIds = new Set<string>();
 
-      for (const candidate of dirResults.candidates) {
-        matchedChunkIds.add(candidate.contextId);
+      if (this.model.navigateDirectory && understanding) {
+        try {
+          const question = understanding.description || query;
+          const rootChildren = rootDirs.map((d) => ({
+            childId: d.id,
+            childType: "directory" as const,
+            summary: d.overallContent,
+            conclusions: d.mainConclusions,
+            goals: d.goals ?? [],
+          }));
+
+          const navResult = await this.model.navigateDirectory({
+            directoryId: "__root__",
+            overallContent: "Entire conversation history",
+            mainConclusions: [],
+            goals: [],
+            question,
+            intent: understanding.intent,
+            children: rootChildren,
+          });
+
+          for (const id of navResult.relevantChildIds) {
+            relevantRootIds.add(id);
+          }
+        } catch {
+          for (const d of rootDirs) relevantRootIds.add(d.id);
+        }
+      } else {
+        for (const d of rootDirs) relevantRootIds.add(d.id);
+      }
+
+      for (const dir of rootDirs) {
+        if (!relevantRootIds.has(dir.id)) continue;
+        const dirResults = await this.drillDown(dir.id, query, understanding);
+        searchedDirectories += dirResults.searched;
+        totalChunksChecked += dirResults.checked;
+
+        for (const candidate of dirResults.candidates) {
+          matchedChunkIds.add(candidate.contextId);
+        }
       }
     }
 
@@ -140,6 +179,8 @@ export class HistoryRetriever {
               summary: msg.content.slice(0, 100),
               progress: "",
               keywords: [],
+              conclusions: [],
+              goals: [],
               sourceRange: { from: msg.id, to: msg.id },
               timeRange: { start: msg.createdAt, end: msg.createdAt },
               relevance,
@@ -154,13 +195,15 @@ export class HistoryRetriever {
     for (const chunk of matchedChunks) {
 
       // Compute relevance score
-      const relevance = computeRelevance(query, chunk.summary, chunk.keywords);
+      const relevance = computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals);
 
       candidates.push({
         contextId: chunk.id,
         summary: chunk.summary,
         progress: chunk.progress,
         keywords: chunk.keywords,
+        conclusions: chunk.conclusions ?? [],
+        goals: chunk.goals ?? [],
         sourceRange: {
           from: chunk.sourceFromId,
           to: chunk.sourceToId,
@@ -207,6 +250,7 @@ export class HistoryRetriever {
     directoryId: string,
     query: string,
     understanding?: QueryUnderstanding,
+    parentContext?: { overallContent: string; mainConclusions: string[]; goals: string[] },
   ): Promise<{
     candidates: Array<{ contextId: string; relevance: number }>;
     searched: number;
@@ -219,76 +263,166 @@ export class HistoryRetriever {
     const dir = await this.store.getDirectory(directoryId);
     if (!dir) return { candidates, searched, checked };
 
-    const dirText = dir.overallContent + " " + dir.mainConclusions.join(" ") + " " + dir.importantChanges.join(" ");
+    // Get children and separate by type
+    const children = await this.store.getDirectoryChildren(directoryId);
+    const chunkChildren = children.filter((c) => c.childType === "chunk");
+    const dirChildren = children.filter((c) => c.childType === "directory");
 
-    // Semantic relevance (tree navigation): LLM judges whether this directory
-    // summary relates to the question. Falls back to keyword computeRelevance.
+    // Batch-fetch all chunk metadata
+    const chunkIds = chunkChildren.map((c) => c.childId);
+    const chunks = chunkIds.length > 0 ? await this.store.getChunksByIds(chunkIds) : [];
+
+    // Fetch sub-directory metadata (for TOC navigation)
+    const subDirs = await Promise.all(
+      dirChildren.map(async (c) => {
+        const d = await this.store.getDirectory(c.childId);
+        return d ? { childId: c.childId, dir: d } : null;
+      }),
+    ).then((results) => results.filter((r): r is NonNullable<typeof r> => r !== null));
+
+    checked = chunkChildren.length + dirChildren.length;
+
+    // ---- TOC-style navigation: batch-select relevant children ----
+    // navigateDirectory serves as both relevance check AND child selection.
+    // If it returns no children, the directory is irrelevant → subtree pruned.
+    if (this.model.navigateDirectory && understanding) {
+      try {
+        const question = understanding.description || query;
+        const intent = understanding.intent;
+
+        // Build children list for the LLM
+        const childEntries: Array<{
+          childId: string;
+          childType: "chunk" | "directory";
+          summary: string;
+          conclusions: string[];
+          goals: string[];
+          keywords?: string[];
+        }> = [];
+
+        for (const chunk of chunks) {
+          childEntries.push({
+            childId: chunk.id,
+            childType: "chunk",
+            summary: chunk.summary,
+            conclusions: chunk.conclusions ?? [],
+            goals: chunk.goals ?? [],
+            keywords: chunk.keywords,
+          });
+        }
+        for (const { childId, dir: subDir } of subDirs) {
+          childEntries.push({
+            childId,
+            childType: "directory",
+            summary: subDir.overallContent,
+            conclusions: subDir.mainConclusions,
+            goals: subDir.goals ?? [],
+          });
+        }
+
+        const navResult = await this.model.navigateDirectory({
+          directoryId,
+          overallContent: dir.overallContent,
+          mainConclusions: dir.mainConclusions,
+          goals: dir.goals ?? [],
+          parentContext,
+          question,
+          intent,
+          children: childEntries,
+        });
+
+        // Empty result → directory irrelevant → subtree pruned
+        if (navResult.relevantChildIds.length === 0) {
+          return { candidates, searched, checked };
+        }
+
+        const relevantSet = new Set(navResult.relevantChildIds);
+
+        // Add relevant chunks
+        for (const chunk of chunks) {
+          if (relevantSet.has(chunk.id)) {
+            candidates.push({ contextId: chunk.id, relevance: 0.8 });
+          }
+        }
+
+        // Parent context for recursive calls (breadcrumb trail)
+        const myContext = {
+          overallContent: dir.overallContent,
+          mainConclusions: dir.mainConclusions,
+          goals: dir.goals ?? [],
+        };
+
+        // Recurse into relevant sub-directories
+        for (const { childId } of subDirs) {
+          if (relevantSet.has(childId)) {
+            searched++;
+            const sub = await this.drillDown(childId, query, understanding, myContext);
+            searched += sub.searched - 1;
+            checked += sub.checked;
+            candidates.push(...sub.candidates);
+          }
+        }
+
+        return { candidates, searched, checked };
+      } catch {
+        // Fall through to per-child fallback below
+      }
+    }
+
+    // ---- Fallback: per-child relevance check (when navigateDirectory unavailable) ----
+    // Also check directory relevance first (isDirectoryRelevant), since we don't
+    // have the batched navigateDirectory to do both at once.
     let dirRelevant: boolean;
     if (this.model.isDirectoryRelevant && understanding) {
       try {
         dirRelevant = await this.model.isDirectoryRelevant({
-          directorySummary: dirText,
+          overallContent: dir.overallContent,
+          mainConclusions: dir.mainConclusions,
+          importantChanges: dir.importantChanges,
+          goals: dir.goals ?? [],
           question: understanding.description || query,
           intent: understanding.intent,
         });
       } catch {
+        const dirText = dir.overallContent + " " + dir.mainConclusions.join(" ") + " " + dir.importantChanges.join(" ") + " " + (dir.goals ?? []).join(" ");
         dirRelevant = computeRelevance(query, dirText, []) > 0;
       }
     } else {
+      const dirText = dir.overallContent + " " + dir.mainConclusions.join(" ") + " " + dir.importantChanges.join(" ") + " " + (dir.goals ?? []).join(" ");
       dirRelevant = computeRelevance(query, dirText, []) > 0;
     }
 
-    // Get children
-    const children = await this.store.getDirectoryChildren(directoryId);
+    if (!dirRelevant) return { candidates, searched, checked };
 
-    // Subtree pruning: if directory is semantically irrelevant, skip its chunks
-    const shouldCheckChunks = dirRelevant;
-
-    // Batch-fetch all chunk children in this directory (single query)
-    const chunkIds = shouldCheckChunks
-      ? children.filter((c) => c.childType === "chunk").map((c) => c.childId)
-      : [];
-    const chunks = chunkIds.length > 0 ? await this.store.getChunksByIds(chunkIds) : [];
-    const chunkMap = new Map(chunks.map((c) => [c.id, c]));
-
-    for (const child of children) {
-      if (child.childType === "chunk") {
-        checked++;
-        if (!shouldCheckChunks) continue;
-        const chunk = chunkMap.get(child.childId);
-        if (chunk) {
-          // Summary-first: LLM semantic match on chunk summary (falls back to keyword)
-          let relevant: boolean;
-          if (this.model.isChunkRelevant && understanding) {
-            try {
-              relevant = await this.model.isChunkRelevant({
-                chunkSummary: chunk.summary,
-                chunkKeywords: chunk.keywords,
-                question: understanding.description || query,
-                intent: understanding.intent,
-              });
-            } catch {
-              relevant = computeRelevance(query, chunk.summary, chunk.keywords) > 0;
-            }
-          } else {
-            relevant = computeRelevance(query, chunk.summary, chunk.keywords) > 0;
-          }
-          if (relevant) {
-            candidates.push({ contextId: chunk.id, relevance: dirRelevant ? 0.8 : 0.6 });
-          }
+    for (const chunk of chunks) {
+      let relevant: boolean;
+      if (this.model.isChunkRelevant && understanding) {
+        try {
+          relevant = await this.model.isChunkRelevant({
+            chunkSummary: chunk.summary,
+            chunkKeywords: chunk.keywords,
+            chunkConclusions: chunk.conclusions ?? [],
+            chunkGoals: chunk.goals ?? [],
+            question: understanding.description || query,
+            intent: understanding.intent,
+          });
+        } catch {
+          relevant = computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals) > 0;
         }
-      } else if (child.childType === "directory") {
-        // Look at the sub-directory's summary FIRST (semantic). Only descend
-        // if relevant — traversal is O(relevant branches), not O(all dirs).
-        const subDir = await this.store.getDirectory(child.childId);
-        if (subDir) {
-          searched++; // Count the directory as examined
-          const sub = await this.drillDown(child.childId, query, understanding);
-          searched += sub.searched - 1; // drillDown counts its root already
-          checked += sub.checked;
-          candidates.push(...sub.candidates);
-        }
+      } else {
+        relevant = computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals) > 0;
       }
+      if (relevant) {
+        candidates.push({ contextId: chunk.id, relevance: 0.8 });
+      }
+    }
+
+    for (const { childId } of subDirs) {
+      searched++;
+      const sub = await this.drillDown(childId, query, understanding);
+      searched += sub.searched - 1;
+      checked += sub.checked;
+      candidates.push(...sub.candidates);
     }
 
     return { candidates, searched, checked };
@@ -323,7 +457,7 @@ export class HistoryRetriever {
     }
     let directoryContext: DirectoryContext | null = null;
     if (chunkRef?.directoryId) { const dir = await this.store.getDirectory(chunkRef.directoryId);
-      if (dir) directoryContext = { directoryId:dir.id, generation:dir.generation, overallContent:dir.overallContent, progress:dir.progress, mainConclusions:dir.mainConclusions, importantChanges:dir.importantChanges }; }
+      if (dir) directoryContext = { directoryId:dir.id, generation:dir.generation, overallContent:dir.overallContent, progress:dir.progress, mainConclusions:dir.mainConclusions, importantChanges:dir.importantChanges, goals: dir.goals ?? [] }; }
     return { messages, directoryContext };
   }
 
@@ -409,9 +543,14 @@ export class HistoryRetriever {
 /**
  * Compute a simple relevance score (0-1) between a query and text + keywords.
  */
-function computeRelevance(query: string, text: string, keywords: string[]): number {
+function computeRelevance(query: string, text: string, keywords: string[], conclusions?: string[], goals?: string[]): number {
   const queryLower = query.toLowerCase();
-  const textLower = text.toLowerCase();
+
+  // Combine all searchable text
+  const searchTexts = [text.toLowerCase()];
+  if (conclusions) searchTexts.push(conclusions.join(" ").toLowerCase());
+  if (goals) searchTexts.push(goals.join(" ").toLowerCase());
+  const combined = searchTexts.join(" ");
 
   // Latin terms: split by space (word boundaries preserved)
   const latinTerms = queryLower.split(/[^a-z0-9]+/).filter((w) => w.length > 1);
@@ -419,7 +558,7 @@ function computeRelevance(query: string, text: string, keywords: string[]): numb
   let matched = 0;
 
   for (const term of latinTerms) {
-    if (textLower.includes(term)) {
+    if (combined.includes(term)) {
       score += 0.25;
       matched++;
     }
@@ -436,7 +575,7 @@ function computeRelevance(query: string, text: string, keywords: string[]): numb
       let hit = false;
       for (let i = 0; i + win <= cjkChars.length; i++) {
         const sub = cjkChars.slice(i, i + win);
-        if (textLower.includes(sub)) {
+        if (combined.includes(sub)) {
           score += 0.25;
           matched++;
           hit = true;

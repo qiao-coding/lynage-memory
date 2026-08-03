@@ -24,6 +24,8 @@ export interface CreateChunkInput {
   summary: string;
   progress: string;
   keywords: string[];
+  conclusions?: string[];
+  goals?: string[];
   sourceFromId: string;
   sourceToId: string;
   directoryId?: string;
@@ -39,6 +41,7 @@ export interface CreateDirectoryInput {
   progress: string;
   mainConclusions: string[];
   importantChanges: string[];
+  goals?: string[];
 }
 
 export interface WorkingMemoryInput {

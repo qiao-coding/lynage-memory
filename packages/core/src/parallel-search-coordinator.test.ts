@@ -14,7 +14,7 @@ class MockStore implements LynageStore {
   dirs: Map<string, DirectoryNode> = new Map();
   children: Map<string, DirectoryChild[]> = new Map();
 
-  async getRootDirectories() { return Array.from(this.dirs.values()).filter(d => d.generation === 0); }
+  async getRootDirectories() { return Array.from(this.dirs.values()).filter(d => d.parentId == null); }
   async getDirectory(id: string) { return this.dirs.get(id) ?? null; }
   async getDirectoryChildren(dirId: string) { return this.children.get(dirId) ?? []; }
   async getChunksByDirectory(dirId: string) {

@@ -145,6 +145,7 @@ export class ParallelSearchCoordinator {
               progress: dir.progress,
               mainConclusions: dir.mainConclusions,
               importantChanges: dir.importantChanges,
+              goals: dir.goals ?? [],
             };
           }
         }
@@ -153,6 +154,8 @@ export class ParallelSearchCoordinator {
           summary: c.reason,
           progress: "",
           keywords: [],
+          conclusions: [],
+          goals: [],
           sourceRange: c.sourceRange,
           timeRange: { start: 0, end: 0 },
           relevance: c.confidence,

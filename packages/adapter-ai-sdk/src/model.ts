@@ -16,68 +16,100 @@ import type {
   QueryUnderstanding,
   DirectoryRelevanceInput,
   ChunkRelevanceInput,
+  NavigateDirectoryInput,
+  NavigateDirectoryResult,
 } from "@lynage/core";
 import {
   ChunkSummarySchema,
   DirectorySummarySchema,
   SearchBatchResultSchema,
+  NavigateDirectoryResultSchema,
 } from "@lynage/core";
 
-const MAX_RETRIES = 3;
+export interface AiSdkModelOptions {
+  /**
+   * Use generateObject (tool_choice structured output) for model calls.
+   * Set false for thinking/reasoning models (e.g. deepseek-v4-flash) where
+   * tool_choice is unsupported — they fail EVERY call, then waste 3 retries
+   * before falling back. Default true.
+   */
+  useToolChoice?: boolean;
+}
 
 export class AiSdkModel implements LynageModel {
   private model: LanguageModelV1;
   private systemPrompt: string;
+  private useToolChoice: boolean;
 
-  constructor(model: LanguageModelV1, systemPrompt?: string) {
+  constructor(model: LanguageModelV1, systemPrompt?: string, options?: AiSdkModelOptions) {
     this.model = model;
     this.systemPrompt = systemPrompt ?? "";
+    this.useToolChoice = options?.useToolChoice ?? true;
+  }
+
+  /**
+   * Structured output: generateObject (if enabled) → generateText + JSON parse.
+   * ONE generateObject attempt only — no retry storm. If both paths fail,
+   * throws; callers fall back to their keyword logic.
+   */
+  private async structured<S extends z.ZodType>(
+    schema: S,
+    prompt: string,
+    system: string,
+    jsonHint: string,
+  ): Promise<z.output<S>> {
+    if (this.useToolChoice) {
+      try {
+        const r = await generateObject({ model: this.model, schema, system, prompt });
+        return r.object as z.output<S>;
+      } catch {
+        // Fall through to generateText + JSON parse (works for thinking models)
+      }
+    }
+    const text = await generateText({ model: this.model, system, prompt: prompt + jsonHint });
+    const jsonMatch = text.text.match(/\{[\s\S]*?\}/); // non-greedy, first JSON object
+    if (jsonMatch) {
+      try {
+        return schema.parse(JSON.parse(jsonMatch[0])) as z.output<S>;
+      } catch {
+        // parse or schema validation failed
+      }
+    }
+    throw new Error("structured output failed");
   }
 
   async summarizeChunk(input: ChunkSummaryInput): Promise<ChunkSummary> {
     const content = formatMessagesForSummary(input.messages, input.recentMemory);
 
-    const prompt = `Summarize the following conversation segment.
+    const prompt = `Summarize the following conversation segment into a STRUCTURED memory entry.
 
-Focus on:
-- What was discussed and decided
-- How the work progressed (not just topics, but the flow of decisions)
-- Key terms and concepts mentioned
+Extract:
+- summary: What was discussed (overview)
+- progress: How work advanced
+- keywords: Key terms
+- conclusions: CONCRETE decisions/outcomes reached (e.g. "chose MongoDB over PostgreSQL", "abandoned CSS Modules"). Empty if none.
+- goals: What this segment aimed to accomplish
+
+This structured output is used for semantic navigation — a reader scans conclusions/goals like a book's table of contents to decide whether to open this window.
 
 ${content}`;
 
-    // Try generateObject first (structured output via tool_choice)
+    // Structured output: generateObject (if enabled) → generateText + JSON.
+    // Single generateObject attempt — a transient/thinking-mode failure
+    // immediately falls to generateText, never a 3× retry storm.
     try {
-      const result = await retryWithValidation(
-        () =>
-          generateObject({
-            model: this.model,
-            schema: ChunkSummarySchema,
-            system:
-              this.systemPrompt +
-              "\nYou are a precise conversation archivist. Summarize the given conversation segment accurately.",
-            prompt,
-          }),
-        MAX_RETRIES,
+      return await this.structured(
+        ChunkSummarySchema,
+        prompt,
+        this.systemPrompt + "\nYou are a precise conversation archivist. Summarize the given conversation segment accurately.",
+        '\n\nReturn ONLY a JSON object with fields: {"summary": "...", "progress": "...", "keywords": [...], "conclusions": [...], "goals": [...]}',
       );
-      return result.object as ChunkSummary;
     } catch {
-      // Fallback: generateText + JSON parse (compatible with thinking models)
-      const text = await generateText({
-        model: this.model,
-        system: this.systemPrompt,
-        prompt: prompt + '\n\nReturn ONLY a JSON object with fields: {"summary": "...", "progress": "...", "keywords": [...]}',
-      });
-      const jsonMatch = text.text.match(/\{[\s\S]*?\}/); // non-greedy, first JSON object only
-      if (jsonMatch) {
-        try {
-          const parsed = ChunkSummarySchema.parse(JSON.parse(jsonMatch[0]));
-          return parsed;
-        } catch {
-          // JSON parse or schema validation failed, use raw text
-        }
-      }
-      return { summary: text.text.slice(0, 200), progress: "Unknown", keywords: [] };
+      // Both structured paths failed — derive a keyword fallback from the messages
+      // so a transient API error NEVER kills the archive task.
+      const raw = input.messages.map((m) => m.content).join(" ").slice(0, 300);
+      const kw = raw.split(/[，。；、,.;\s]+/).filter((w) => w.length >= 2).slice(0, 10);
+      return { summary: raw.slice(0, 200), progress: "Unknown", keywords: kw, conclusions: [], goals: [] };
     }
   }
 
@@ -93,7 +125,7 @@ ${content}`;
       )
       .join("\n\n");
 
-    const prompt = `Create a directory summary that synthesizes the following conversation segments.
+    const prompt = `Create a directory summary that synthesizes the following conversation segments. This is the PARENT CONTEXT for semantic navigation — like a book's table of contents, it must let a reader decide which child to open.
 
 Time range: ${new Date(input.timeRangeStart).toISOString()} to ${new Date(input.timeRangeEnd).toISOString()}
 
@@ -104,34 +136,27 @@ Produce:
 - overallContent: A narrative summary of what happened
 - progress: How the project advanced
 - mainConclusions: Key decisions reached
-- importantChanges: Changes in direction or abandoned approaches`;
+- importantChanges: Changes in direction or abandoned approaches
+- goals: Aggregated goals across the child windows`;
 
     try {
-      const result = await retryWithValidation(
-        () =>
-          generateObject({
-            model: this.model,
-            schema: DirectorySummarySchema,
-            system: this.systemPrompt,
-            prompt,
-          }),
-        MAX_RETRIES,
+      return await this.structured(
+        DirectorySummarySchema,
+        prompt,
+        this.systemPrompt,
+        '\n\nReturn ONLY JSON: {"overallContent":"...","progress":"...","mainConclusions":[...],"importantChanges":[...],"goals":[...]}',
       );
-      return result.object as DirectorySummary;
     } catch {
-      const text = await generateText({
-        model: this.model,
-        prompt: prompt + '\n\nReturn ONLY JSON: {"overallContent":"...","progress":"...","mainConclusions":[...],"importantChanges":[...]}',
-      });
-      const jsonMatch = text.text.match(/\{[\s\S]*?\}/);
-      if (jsonMatch) {
-        try {
-          return DirectorySummarySchema.parse(JSON.parse(jsonMatch[0]));
-        } catch {
-          // parse failed, use raw text
-        }
-      }
-      return { overallContent: text.text.slice(0, 200), progress: "Unknown", mainConclusions: [], importantChanges: [] };
+      // Both structured paths failed — aggregate keywords/conclusions from children.
+      const allKeywords = [...new Set(input.childDescriptions.flatMap((c) => c.keywords ?? []))];
+      const allConclusions = [...new Set(input.childDescriptions.flatMap((c) => c.conclusions))];
+      return {
+        overallContent: "Phases covered: " + allKeywords.slice(0, 30).join(", "),
+        progress: `Archived ${input.childDescriptions.length} windows`,
+        mainConclusions: allConclusions.slice(0, 20),
+        importantChanges: [],
+        goals: [],
+      };
     }
   }
 
@@ -145,15 +170,9 @@ Produce:
       )
       .join("\n\n");
 
-    const result = await retryWithValidation(
-      () =>
-        generateObject({
-          model: this.model,
-          schema: SearchBatchResultSchema,
-          system:
-            this.systemPrompt +
-            "\nYou are a precise search analyst. Match queries against directory summaries.",
-          prompt: `A user is searching for: "${input.query}"
+    return this.structured(
+      SearchBatchResultSchema,
+      `A user is searching for: "${input.query}"
 
 Current understanding of what they're looking for: ${input.currentUnderstanding || "Unknown — this is a vague query."}
 
@@ -165,11 +184,9 @@ Determine:
 - reasoning: Why those are relevant (or why none match)
 - shouldContinue: Should we check more directories?
 - refinedUnderstanding: (optional) Has the search clarified what the user is really looking for?`,
-        }),
-      MAX_RETRIES,
+      this.systemPrompt + "\nYou are a precise search analyst. Match queries against directory summaries.",
+      '\n\nReturn ONLY JSON: {"relevantIds":[...],"reasoning":"...","shouldContinue":true/false,"refinedUnderstanding":"..."}',
     );
-
-    return result.object as SearchBatchResult;
   }
 
   /**
@@ -192,12 +209,12 @@ Return:
 - keywords: 2-4 key terms that would appear in the relevant conversation (topic words like 样式方案, database — NOT filler like 记不清/怎么/定了)`;
 
     try {
-      const result = await retryWithValidation(
-        () =>
-          generateObject({ model: this.model, schema, system: this.systemPrompt, prompt }),
-        MAX_RETRIES,
+      return await this.structured(
+        schema,
+        prompt,
+        this.systemPrompt,
+        '\n\nReturn ONLY JSON: {"intent":"fact_lookup"|"process_recall"|"decision","description":"...","keywords":[...]}',
       );
-      return result.object as QueryUnderstanding;
     } catch {
       // Fallback: strip fillers, keep likely topic words
       const keywords = question
@@ -218,16 +235,18 @@ Return:
    * The parent context (directory summary) guides whether to descend.
    */
   async isDirectoryRelevant(input: DirectoryRelevanceInput): Promise<boolean> {
-    const prompt = `You are navigating a memory directory tree. Decide whether to descend into this directory.
+    const prompt = `You are navigating a memory directory tree. Like a book's table of contents, decide whether this directory's content relates to the user's question.
 
 User question: "${input.question}"
 What the user is looking for: intent=${input.intent}
 
-Directory summary (parent context):
-"${input.directorySummary}"
+Directory overview: "${input.overallContent}"
+Directory conclusions: ${input.mainConclusions.join("; ")}
+Directory goals: ${input.goals.join("; ")}
+Important changes: ${input.importantChanges.join("; ")}
 
-Does this directory's content relate to what the user is looking for? Answer with a single word: YES or NO.
-- YES if the directory covers the topic/semantics of the question (even if exact words differ)
+Does this directory contain information relevant to the user's question? Answer with a single word: YES or NO.
+- YES if the directory's conclusions/goals/content relate to what the user asks about (semantic match, exact words may differ)
 - NO if it's clearly unrelated`;
 
     try {
@@ -235,9 +254,9 @@ Does this directory's content relate to what the user is looking for? Answer wit
       const t = text.text.trim().toUpperCase();
       return t.startsWith("YES");
     } catch {
-      // Fallback: token overlap
+      // Fallback: token overlap across all structured fields
       const terms: string[] = input.question.replace(/[^\w\s一-鿿]/g, " ").split(/\s+/).filter((k) => k.length > 1);
-      const summary = input.directorySummary;
+      const summary = input.overallContent + " " + input.mainConclusions.join(" ") + " " + input.goals.join(" ") + " " + input.importantChanges.join(" ");
       return terms.some((t: string) => summary.includes(t));
     }
   }
@@ -252,23 +271,83 @@ Does this directory's content relate to what the user is looking for? Answer wit
 User question: "${input.question}"
 What the user is looking for: intent=${input.intent}
 
-Window summary (AI-generated):
-"${input.chunkSummary}"
+Window overview: "${input.chunkSummary}"
+Window conclusions: ${input.chunkConclusions.join("; ")}
+Window goals: ${input.chunkGoals.join("; ")}
 Window keywords: ${input.chunkKeywords.join(", ")}
 
-Does this window's content match what the user is looking for? Answer with a single word: YES or NO.
-- YES if the window covers the topic/decision/process the user asks about (semantic match, exact words may differ)
-- NO if it's clearly unrelated`;
+Like a book chapter — decide if this window contains what the user asks about. Answer with a single word: YES or NO.
+- YES if the window's conclusions/goals/topic match the user's question (semantic match, exact words may differ)
+- NO if clearly unrelated`;
 
     try {
       const text = await generateText({ model: this.model, system: this.systemPrompt, prompt, maxTokens: 10 });
       const t = text.text.trim().toUpperCase();
       return t.startsWith("YES");
     } catch {
-      // Fallback: token overlap with summary + keywords
+      // Fallback: token overlap with conclusions + goals + summary
       const terms: string[] = input.question.replace(/[^\w\s一-鿿]/g, " ").split(/\s+/).filter((k: string) => k.length > 1);
-      const text = input.chunkSummary + " " + input.chunkKeywords.join(" ");
+      const text = input.chunkSummary + " " + input.chunkConclusions.join(" ") + " " + input.chunkGoals.join(" ") + " " + input.chunkKeywords.join(" ");
       return terms.some((t: string) => text.includes(t));
+    }
+  }
+
+  /**
+   * TOC-style navigation: scan all children of a directory at once
+   * and select which ones are relevant — like scanning a book's table of contents.
+   */
+  async navigateDirectory(input: NavigateDirectoryInput): Promise<NavigateDirectoryResult> {
+    const childrenList = input.children
+      .map(
+        (c, i) =>
+          `[${i + 1}] Type: ${c.childType === "chunk" ? "window" : "phase"} | ID: ${c.childId}\n    Summary: "${c.summary}"\n    Conclusions: ${c.conclusions.join("; ")}\n    Goals: ${c.goals.join("; ")}` +
+          (c.keywords?.length ? `\n    Keywords: ${c.keywords.join(", ")}` : ""),
+      )
+      .join("\n\n");
+
+    const parentBreadcrumb = input.parentContext
+      ? `Parent context (this directory is inside):
+  Overview: "${input.parentContext.overallContent}"
+  Conclusions: ${input.parentContext.mainConclusions.join("; ")}
+  Goals: ${input.parentContext.goals.join("; ")}
+
+`
+      : "";
+
+    const prompt = `You are scanning a memory directory like a book's table of contents. The user has a question — find which chapters (children) are relevant.
+
+${parentBreadcrumb}Directory context (section overview):
+  Overview: "${input.overallContent}"
+  Conclusions: ${input.mainConclusions.join("; ")}
+  Goals: ${input.goals.join("; ")}
+
+User question: "${input.question}"
+Intent: ${input.intent}
+
+Children (chapters in this section):
+${childrenList}
+
+Determine:
+- relevantChildIds: Which child IDs are relevant to the question? Include ALL that match, not just the best one.
+- reasoning: Brief explanation of why those were selected (or why none match)`;
+
+    try {
+      return await this.structured(
+        NavigateDirectoryResultSchema,
+        prompt,
+        this.systemPrompt + "\nYou are a precise TOC navigator. Select all relevant children.",
+        '\n\nReturn ONLY JSON: {"relevantChildIds":["..."],"reasoning":"..."}',
+      );
+    } catch {
+      // Fallback: keyword overlap on children summaries/conclusions/goals
+      const terms: string[] = input.question.replace(/[^\w\s一-鿿]/g, " ").split(/\s+/).filter((k: string) => k.length > 1);
+      const relevantChildIds = input.children
+        .filter((c) => {
+          const text = c.summary + " " + c.conclusions.join(" ") + " " + c.goals.join(" ") + " " + (c.keywords ?? []).join(" ");
+          return terms.some((t: string) => text.includes(t));
+        })
+        .map((c) => c.childId);
+      return { relevantChildIds, reasoning: "Keyword fallback" };
     }
   }
 }
@@ -299,25 +378,4 @@ function formatMessagesForSummary(
   }
 
   return lines.join("\n\n");
-}
-
-async function retryWithValidation<T>(
-  fn: () => Promise<{ object: T }>,
-  maxRetries: number,
-): Promise<{ object: T }> {
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastError = err;
-      if (attempt < maxRetries - 1) {
-        // Brief wait before retry (exponential backoff)
-        await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
-      }
-    }
-  }
-
-  throw lastError;
 }

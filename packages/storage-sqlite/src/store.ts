@@ -159,6 +159,8 @@ export class SqliteStore implements LynageStore {
       sourceFromId: input.sourceFromId,
       sourceToId: input.sourceToId,
       directoryId: input.directoryId ?? null,
+      conclusions: Array.isArray(input.conclusions) ? input.conclusions : [],
+      goals: Array.isArray(input.goals) ? input.goals : [],
       createdAt: now,
     });
 
@@ -281,13 +283,15 @@ export class SqliteStore implements LynageStore {
   }
 
   async getRootDirectories(sessionId: string): Promise<DirectoryNode[]> {
+    // Roots are identified by parentId IS NULL — NOT generation === 0.
+    // After G0→G1 compaction the new root has generation 1; a generation
+    // filter would return [] and kill tree navigation entirely.
     const rows = await this.db
       .select()
       .from(schema.directories)
       .where(
         and(
           eq(schema.directories.sessionId, sessionId),
-          eq(schema.directories.generation, 0),
           isNull(schema.directories.parentId),
         ),
       )
@@ -560,6 +564,8 @@ export class SqliteStore implements LynageStore {
       summary: r.summary,
       progress: r.progress,
       keywords: r.keywords as string[],
+      conclusions: (r.conclusions as string[]) ?? [],
+      goals: (r.goals as string[]) ?? [],
       sourceFromId: r.sourceFromId,
       sourceToId: r.sourceToId,
       directoryId: r.directoryId ?? undefined,
@@ -581,6 +587,7 @@ export class SqliteStore implements LynageStore {
       progress: r.progress,
       mainConclusions: r.mainConclusions as string[],
       importantChanges: r.importantChanges as string[],
+      goals: (r.goals as string[]) ?? [],
       createdAt: r.createdAt,
     };
   }

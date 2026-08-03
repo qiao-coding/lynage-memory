@@ -58,6 +58,8 @@ export function ensureTables(raw: Database.Database): void {
       summary TEXT NOT NULL DEFAULT '',
       progress TEXT NOT NULL DEFAULT '',
       keywords TEXT NOT NULL DEFAULT '[]',
+      conclusions TEXT NOT NULL DEFAULT '[]',
+      goals TEXT NOT NULL DEFAULT '[]',
       source_from_id TEXT NOT NULL,
       source_to_id TEXT NOT NULL,
       directory_id TEXT,
@@ -75,6 +77,7 @@ export function ensureTables(raw: Database.Database): void {
       progress TEXT NOT NULL DEFAULT '',
       main_conclusions TEXT NOT NULL DEFAULT '[]',
       important_changes TEXT NOT NULL DEFAULT '[]',
+      goals TEXT NOT NULL DEFAULT '[]',
       created_at INTEGER NOT NULL
     );
 
