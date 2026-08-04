@@ -121,6 +121,8 @@ export interface LynageStore {
   searchMessages(query: string, sessionId?: string): Promise<Message[]>;
   /** FTS over chunk structured summaries → chunk ids by bm25 relevance */
   searchChunks(query: string, sessionId?: string): Promise<string[]>;
+  /** FTS over directory summaries → directory ids by bm25 (cheap tree pruning) */
+  searchDirectories(query: string, sessionId?: string): Promise<string[]>;
   getEstimatedTokenCount(
     sessionId: string,
     sinceId?: string,

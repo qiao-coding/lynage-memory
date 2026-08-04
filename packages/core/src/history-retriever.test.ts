@@ -73,6 +73,11 @@ class MockStoreForSearch implements LynageStore {
       .filter((c) => (c.summary + c.keywords.join(" ") + (c.conclusions ?? []).join(" ") + (c.goals ?? []).join(" ")).toLowerCase().includes(query.toLowerCase()))
       .map((c) => c.id);
   }
+  async searchDirectories(query: string) {
+    return Array.from(this.dirs.values())
+      .filter((d) => (d.overallContent + d.mainConclusions.join(" ") + (d.goals ?? []).join(" ")).toLowerCase().includes(query.toLowerCase()))
+      .map((d) => d.id);
+  }
   async getEstimatedTokenCount() { return 0; }
 }
 

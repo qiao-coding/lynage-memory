@@ -576,6 +576,39 @@ export class SqliteStore implements LynageStore {
     return rows.slice(0, 100).map((r) => r.id);
   }
 
+  /**
+   * FTS over directory summaries (overall_content/conclusions/goals).
+   * Returns directory ids by bm25 — the cheap pruning signal for tree
+   * navigation (replaces per-level LLM judgment).
+   */
+  async searchDirectories(query: string, sessionId?: string): Promise<string[]> {
+    const sanitized = query.replace(/[^\w\s一-鿿぀-ゟ゠-ヿ]/g, " ").replace(/\s+/g, " ").trim();
+    if (!sanitized) return [];
+
+    const queryTerms = sanitized.split(/\s+/).filter((t) => t.length > 0);
+    const needLikeFallback = queryTerms.some((t) => t.length < 3);
+
+    if (needLikeFallback) {
+      const cond = queryTerms
+        .map(() => "(overall_content LIKE ? OR main_conclusions LIKE ? OR goals LIKE ?)")
+        .join(" AND ");
+      const params = queryTerms.flatMap((t) => [`%${t}%`, `%${t}%`, `%${t}%`]);
+      const sql = `SELECT id FROM directories WHERE ${cond}${sessionId ? " AND session_id = ?" : ""}`;
+      const rows = this.raw.prepare(sql).all(...params, ...(sessionId ? [sessionId] : [])) as Array<{ id: string }>;
+      return rows.map((r) => r.id);
+    }
+
+    const rows = this.raw
+      .prepare(
+        `SELECT d.id FROM directories d
+         JOIN directories_fts f ON f.rowid = d.rowid
+         WHERE directories_fts MATCH ?${sessionId ? " AND d.session_id = ?" : ""}
+         ORDER BY bm25(directories_fts)`,
+      )
+      .all(sanitized, ...(sessionId ? [sessionId] : [])) as Array<{ id: string }>;
+    return rows.slice(0, 100).map((r) => r.id);
+  }
+
   // -----------------------------------------------------------------------
   // Type converters (DB row → domain type)
   // -----------------------------------------------------------------------

@@ -148,65 +148,21 @@ export class HistoryRetriever {
       }
     }
 
-    // ---- Step 2 (FALLBACK, ~28s): LLM semantic tree navigation ----
-    // Only when FTS found NOTHING — fully abstract queries (no topic word any
-    // trigram can match). Unarchived recent messages already pushed to
-    // `candidates` count as results, so they suppress the expensive fallback.
+    // ---- Step 2 (FALLBACK, ~20ms): FTS tree navigation ----
+    // Only when flat FTS found NOTHING. Traverses the directory tree by cheap
+    // FTS pruning (directory + chunk summaries) instead of per-level LLM calls.
+    // No analyzeSearchQuery — extractKeywords already gives the FTS term.
     if (matchedChunkIds.size === 0 && candidates.length === 0) {
-      let understanding: QueryUnderstanding | undefined;
-      if (this.model.analyzeSearchQuery) {
-        try {
-          understanding = await this.model.analyzeSearchQuery(query);
-        } catch { /* fall back to raw query */ }
-      }
-
       const rootDirs = await this.store.getRootDirectories(sessionId);
       searchedDirectories = rootDirs.length;
 
-      if (rootDirs.length > 0) {
-        // Batch-select relevant root directories (one LLM call for all roots)
-        const relevantRootIds = new Set<string>();
+      for (const dir of rootDirs) {
+        const dirResults = await this.drillDown(dir.id, query);
+        searchedDirectories += dirResults.searched;
+        totalChunksChecked += dirResults.checked;
 
-        if (this.model.navigateDirectory && understanding) {
-          try {
-            const question = understanding.description || query;
-            const rootChildren = rootDirs.map((d) => ({
-              childId: d.id,
-              childType: "directory" as const,
-              summary: d.overallContent,
-              conclusions: d.mainConclusions,
-              goals: d.goals ?? [],
-            }));
-
-            const navResult = await this.model.navigateDirectory({
-              directoryId: "__root__",
-              overallContent: "Entire conversation history",
-              mainConclusions: [],
-              goals: [],
-              question,
-              intent: understanding.intent,
-              children: rootChildren,
-            });
-
-            for (const id of navResult.relevantChildIds) {
-              relevantRootIds.add(id);
-            }
-          } catch {
-            for (const d of rootDirs) relevantRootIds.add(d.id);
-          }
-        } else {
-          for (const d of rootDirs) relevantRootIds.add(d.id);
-        }
-
-        for (const dir of rootDirs) {
-          if (!relevantRootIds.has(dir.id)) continue;
-          const dirResults = await this.drillDown(dir.id, query, understanding);
-          searchedDirectories += dirResults.searched;
-          totalChunksChecked += dirResults.checked;
-
-          for (const candidate of dirResults.candidates) {
-            matchedChunkIds.add(candidate.contextId);
-          }
+        for (const candidate of dirResults.candidates) {
+          matchedChunkIds.add(candidate.contextId);
         }
       }
     }
@@ -309,8 +265,10 @@ export class HistoryRetriever {
   }
 
   /**
-   * Drill down into a directory and its descendants.
-   * Returns matching chunk candidates.
+   * Drill down into a directory and its descendants using CHEAP FTS pruning.
+   * Directory summaries + chunk summaries are matched by trigram FTS (~ms/level)
+   * — no LLM call per level. navigateDirectory remains a deep fallback only
+   * when FTS pruning finds nothing.
    */
   async drillDown(
     directoryId: string,
@@ -329,16 +287,13 @@ export class HistoryRetriever {
     const dir = await this.store.getDirectory(directoryId);
     if (!dir) return { candidates, searched, checked };
 
-    // Get children and separate by type
     const children = await this.store.getDirectoryChildren(directoryId);
     const chunkChildren = children.filter((c) => c.childType === "chunk");
     const dirChildren = children.filter((c) => c.childType === "directory");
 
-    // Batch-fetch all chunk metadata
     const chunkIds = chunkChildren.map((c) => c.childId);
     const chunks = chunkIds.length > 0 ? await this.store.getChunksByIds(chunkIds) : [];
 
-    // Fetch sub-directory metadata (for TOC navigation)
     const subDirs = await Promise.all(
       dirChildren.map(async (c) => {
         const d = await this.store.getDirectory(c.childId);
@@ -348,15 +303,43 @@ export class HistoryRetriever {
 
     checked = chunkChildren.length + dirChildren.length;
 
-    // ---- TOC-style navigation: batch-select relevant children ----
-    // navigateDirectory serves as both relevance check AND child selection.
-    // If it returns no children, the directory is irrelevant → subtree pruned.
-    if (this.model.navigateDirectory && understanding) {
+    // ---- CHEAP FTS TREE PRUNING (primary, ~ms/level) ----
+    // Match this directory's sub-directory summaries and chunk summaries by
+    // FTS trigram. Descend only into matching subtrees — O(relevant branches).
+    const ftsQuery = extractKeywords(query)[0] || query;
+    const matchingDirs = new Set(await this.store.searchDirectories(ftsQuery, dir.sessionId));
+    const matchingChunks = new Set(await this.store.searchChunks(ftsQuery, dir.sessionId));
+
+    const myContext = {
+      overallContent: dir.overallContent,
+      mainConclusions: dir.mainConclusions,
+      goals: dir.goals ?? [],
+    };
+
+    // Recurse into matching sub-directories
+    for (const { childId } of subDirs) {
+      if (matchingDirs.has(childId)) {
+        searched++;
+        const sub = await this.drillDown(childId, query, understanding, myContext);
+        searched += sub.searched - 1;
+        checked += sub.checked;
+        candidates.push(...sub.candidates);
+      }
+    }
+
+    // Add matching chunks
+    for (const chunk of chunks) {
+      if (matchingChunks.has(chunk.id)) {
+        candidates.push({ contextId: chunk.id, relevance: 0.8 });
+      }
+    }
+
+    // ---- LLM deep fallback: only when FTS pruning found nothing ----
+    // navigateDirectory can still disambiguate a fully abstract query that no
+    // trigram matches. Bounded: only if this subtree yielded no candidates.
+    if (candidates.length === 0 && this.model.navigateDirectory && understanding) {
       try {
         const question = understanding.description || query;
-        const intent = understanding.intent;
-
-        // Build children list for the LLM
         const childEntries: Array<{
           childId: string;
           childType: "chunk" | "directory";
@@ -365,7 +348,6 @@ export class HistoryRetriever {
           goals: string[];
           keywords?: string[];
         }> = [];
-
         for (const chunk of chunks) {
           childEntries.push({
             childId: chunk.id,
@@ -385,7 +367,6 @@ export class HistoryRetriever {
             goals: subDir.goals ?? [],
           });
         }
-
         const navResult = await this.model.navigateDirectory({
           directoryId,
           overallContent: dir.overallContent,
@@ -393,32 +374,13 @@ export class HistoryRetriever {
           goals: dir.goals ?? [],
           parentContext,
           question,
-          intent,
+          intent: understanding.intent,
           children: childEntries,
         });
-
-        // Empty result → directory irrelevant → subtree pruned
-        if (navResult.relevantChildIds.length === 0) {
-          return { candidates, searched, checked };
-        }
-
         const relevantSet = new Set(navResult.relevantChildIds);
-
-        // Add relevant chunks
         for (const chunk of chunks) {
-          if (relevantSet.has(chunk.id)) {
-            candidates.push({ contextId: chunk.id, relevance: 0.8 });
-          }
+          if (relevantSet.has(chunk.id)) candidates.push({ contextId: chunk.id, relevance: 0.8 });
         }
-
-        // Parent context for recursive calls (breadcrumb trail)
-        const myContext = {
-          overallContent: dir.overallContent,
-          mainConclusions: dir.mainConclusions,
-          goals: dir.goals ?? [],
-        };
-
-        // Recurse into relevant sub-directories
         for (const { childId } of subDirs) {
           if (relevantSet.has(childId)) {
             searched++;
@@ -428,67 +390,9 @@ export class HistoryRetriever {
             candidates.push(...sub.candidates);
           }
         }
-
-        return { candidates, searched, checked };
       } catch {
-        // Fall through to per-child fallback below
+        // Keep whatever FTS found (possibly nothing)
       }
-    }
-
-    // ---- Fallback: per-child relevance check (when navigateDirectory unavailable) ----
-    // Also check directory relevance first (isDirectoryRelevant), since we don't
-    // have the batched navigateDirectory to do both at once.
-    let dirRelevant: boolean;
-    if (this.model.isDirectoryRelevant && understanding) {
-      try {
-        dirRelevant = await this.model.isDirectoryRelevant({
-          overallContent: dir.overallContent,
-          mainConclusions: dir.mainConclusions,
-          importantChanges: dir.importantChanges,
-          goals: dir.goals ?? [],
-          question: understanding.description || query,
-          intent: understanding.intent,
-        });
-      } catch {
-        const dirText = dir.overallContent + " " + dir.mainConclusions.join(" ") + " " + dir.importantChanges.join(" ") + " " + (dir.goals ?? []).join(" ");
-        dirRelevant = computeRelevance(query, dirText, []) > 0;
-      }
-    } else {
-      const dirText = dir.overallContent + " " + dir.mainConclusions.join(" ") + " " + dir.importantChanges.join(" ") + " " + (dir.goals ?? []).join(" ");
-      dirRelevant = computeRelevance(query, dirText, []) > 0;
-    }
-
-    if (!dirRelevant) return { candidates, searched, checked };
-
-    for (const chunk of chunks) {
-      let relevant: boolean;
-      if (this.model.isChunkRelevant && understanding) {
-        try {
-          relevant = await this.model.isChunkRelevant({
-            chunkSummary: chunk.summary,
-            chunkKeywords: chunk.keywords,
-            chunkConclusions: chunk.conclusions ?? [],
-            chunkGoals: chunk.goals ?? [],
-            question: understanding.description || query,
-            intent: understanding.intent,
-          });
-        } catch {
-          relevant = computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals) > 0;
-        }
-      } else {
-        relevant = computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals) > 0;
-      }
-      if (relevant) {
-        candidates.push({ contextId: chunk.id, relevance: 0.8 });
-      }
-    }
-
-    for (const { childId } of subDirs) {
-      searched++;
-      const sub = await this.drillDown(childId, query, understanding);
-      searched += sub.searched - 1;
-      checked += sub.checked;
-      candidates.push(...sub.candidates);
     }
 
     return { candidates, searched, checked };

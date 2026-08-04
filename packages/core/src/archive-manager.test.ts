@@ -72,6 +72,7 @@ class MockStore implements LynageStore {
   async getSearchTask() { return null; }
   async searchMessages() { return []; }
   async searchChunks() { return []; }
+  async searchDirectories() { return []; }
   async getEstimatedTokenCount() { return 0; }
 }
 

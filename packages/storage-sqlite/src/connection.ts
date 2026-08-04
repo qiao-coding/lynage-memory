@@ -173,6 +173,21 @@ function setupFts(raw: Database.Database): void {
     );
   `);
 
+  // Directory summaries FTS: index the curated phase metadata so TREE
+  // NAVIGATION can prune by cheap index lookup (~6ms/level) instead of an
+  // LLM call per level (~5-7s). Trigram matches topic words in summaries.
+  raw.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS directories_fts USING fts5(
+      overall_content,
+      main_conclusions,
+      goals,
+      important_changes,
+      content='',
+      content_rowid='rowid',
+      tokenize='trigram'
+    );
+  `);
+
   raw.exec(`
     CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages
     BEGIN
@@ -220,6 +235,33 @@ function setupFts(raw: Database.Database): void {
       VALUES ('delete', old.rowid, old.summary, old.keywords, old.conclusions, old.goals);
       INSERT INTO chunks_fts(rowid, summary, keywords, conclusions, goals)
       VALUES (new.rowid, new.summary, new.keywords, new.conclusions, new.goals);
+    END;
+  `);
+
+  // Directory summary FTS sync triggers (contentless — delete+insert on update).
+  raw.exec(`
+    CREATE TRIGGER IF NOT EXISTS directories_fts_insert AFTER INSERT ON directories
+    BEGIN
+      INSERT INTO directories_fts(rowid, overall_content, main_conclusions, goals, important_changes)
+      VALUES (new.rowid, new.overall_content, new.main_conclusions, new.goals, new.important_changes);
+    END;
+  `);
+
+  raw.exec(`
+    CREATE TRIGGER IF NOT EXISTS directories_fts_delete AFTER DELETE ON directories
+    BEGIN
+      INSERT INTO directories_fts(directories_fts, rowid, overall_content, main_conclusions, goals, important_changes)
+      VALUES ('delete', old.rowid, old.overall_content, old.main_conclusions, old.goals, old.important_changes);
+    END;
+  `);
+
+  raw.exec(`
+    CREATE TRIGGER IF NOT EXISTS directories_fts_update AFTER UPDATE ON directories
+    BEGIN
+      INSERT INTO directories_fts(directories_fts, rowid, overall_content, main_conclusions, goals, important_changes)
+      VALUES ('delete', old.rowid, old.overall_content, old.main_conclusions, old.goals, old.important_changes);
+      INSERT INTO directories_fts(rowid, overall_content, main_conclusions, goals, important_changes)
+      VALUES (new.rowid, new.overall_content, new.main_conclusions, new.goals, new.important_changes);
     END;
   `);
 }
