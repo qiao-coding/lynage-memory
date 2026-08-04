@@ -227,17 +227,23 @@ export class HistoryRetriever {
         // appear in 98% of chunks, and the decision chunk is one of them. A
         // keyword score can't rank it higher, so a small cap excludes the answer.
         const pool = allMatched.slice(0, 100);
+        // Send ONLY the matching message snippet (ground truth) — the drifted
+        // English summary + conclusions/goals bloat the prompt. This keeps the
+        // LLM's signal identical while cutting the rerank call size dramatically.
         const rerankResult = await this.model.rerankCandidates({
           query,
           intent: "unknown",
-          candidates: pool.map((chunk) => ({
-            contextId: chunk.id,
-            summary: chunk.summary,
-            conclusions: chunk.conclusions ?? [],
-            goals: chunk.goals ?? [],
-            keywords: chunk.keywords,
-            messageSnippet: (bestMsgByChunk.get(chunk.id) ?? chunk.summary).slice(0, 140),
-          })),
+          candidates: pool.map((chunk) => {
+            const snippet = (bestMsgByChunk.get(chunk.id) ?? chunk.summary).slice(0, 120);
+            return {
+              contextId: chunk.id,
+              summary: snippet,
+              conclusions: [],
+              goals: [],
+              keywords: [],
+              messageSnippet: snippet,
+            };
+          }),
         });
         if (rerankResult.relevantIds.length > 0) {
           matchedChunkIds = new Set(rerankResult.relevantIds);
