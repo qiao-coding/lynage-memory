@@ -5,13 +5,15 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org/)
 
-**AI Agent 长对话记忆系统 — 无限对话历史，固定 LLM 成本。**
+**可靠的 AI Agent 对话记忆基础设施 — 消息不可变、树导航、高保真召回，固定 LLM 成本。**
 
 [English](README.md)
 
 ***
 
 ## 🧠 概述
+
+Lynage 是**记忆基础设施层，不是推理层**。它保证 Agent 从记忆里需要的东西：原文永不丢失、可被自生长的树导航、按需高保真召回。**把召回的文本变成"角色记忆"——提炼认知（"掉进过池塘" → "他怕水"）并在场景中运用——是 Agent 的职责，不是 Lynage 的。**
 
 Lynage 对 Agent 记忆采取了根本不同的思路。不把旧对话压缩成摘要（信息永久丢失），也不把所有内容塞进上下文窗口（Token 成本线性增长），而是构建一棵**自生长的对话分块索引树**。
 

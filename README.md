@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org/)
 
-**Long-term memory for AI agents — unlimited conversation history at fixed LLM cost.**
+**Reliable conversation memory for AI agents — immutable storage, tree navigation, high-fidelity recall at fixed LLM cost.**
 
 [Quick Start](#-quick-start) · [Benchmarks](#-benchmark-results) · [Architecture](docs/02-how-it-works.md) · [API](#-api-reference)
 
@@ -14,6 +14,8 @@
 ---
 
 ## 🧠 Overview
+
+Lynage is a **memory infrastructure layer**, not a reasoning layer. It guarantees what an agent needs from memory: original text is never lost, it can be navigated by a self-growing tree, and specific content is recalled on demand. **Turning recalled text into "character memory" — distilling facts ("fell into a pond" → "he fears water") and using them contextually — is the agent's job, not Lynage's.**
 
 Lynage takes a fundamentally different approach to agent memory. Instead of compressing old conversations into summaries (and losing information forever), or stuffing everything into context windows (and paying linear token costs), Lynage builds a **self-growing tree of indexed conversation chunks**.
 
