@@ -85,7 +85,7 @@ Designed for narrative memory (Protocol Zero): how often specific plot details s
 
 By type (full context): **台词 100% · 时间线 100% · 伏笔 100% · 角色记忆 67%**.
 
-> **Summaries + source beats summaries alone because narrative detail lives in the raw dialogue; summaries are navigation, not storage** — `openSource` restoring the original lines is what makes fidelity work. Embedding model matters too: `bge-small-en` read Chinese poorly (58%, noise sim ~0.74); `bge-small-zh` reached 92%. Use a Chinese/multilingual embedder for Chinese narratives. The remaining 角色记忆 67% reflects run-to-run retrieval variance (67-100%).
+> **Summaries + source beats summaries alone because narrative detail lives in the raw dialogue; summaries are navigation, not storage** — `openSource` restoring the original lines is what makes fidelity work.
 
 ### Why Lynage Is Different
 
