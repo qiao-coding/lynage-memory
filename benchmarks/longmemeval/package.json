@@ -1,12 +1,12 @@
 {
-  "name": "lynage-benchmarks",
+  "name": "lynage-bench-longmemeval",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "scripts": {
-    "bench": "tsx compare.ts",
-    "bench-real": "tsx bench-real.ts",
-    "simulate": "tsx simulate.ts"
+    "setup": "tsx setup.ts",
+    "eval": "tsx eval.ts",
+    "generate-tests": "tsx generate-tests.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.0",
@@ -15,7 +15,6 @@
     "@lynage/storage-sqlite": "workspace:*",
     "ai": "^4.3.0",
     "better-sqlite3": "^11.7.0",
-    "hermes-memory-engine": "^0.1.0",
     "promptfoo": "^0.121.20"
   },
   "devDependencies": {

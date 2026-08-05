@@ -37,17 +37,26 @@ export interface AiSdkModelOptions {
    * before falling back. Default true.
    */
   useToolChoice?: boolean;
+  /**
+   * Sampling temperature for all model calls (archiving summaries, search
+   * rerank, directory navigation). Default 0 = deterministic output, which
+   * makes archiving chunk boundaries reproducible across runs (important for
+   * benchmarking). Set >0 for exploratory agents.
+   */
+  temperature?: number;
 }
 
 export class AiSdkModel implements LynageModel {
   private model: LanguageModelV1;
   private systemPrompt: string;
   private useToolChoice: boolean;
+  private temperature: number;
 
   constructor(model: LanguageModelV1, systemPrompt?: string, options?: AiSdkModelOptions) {
     this.model = model;
     this.systemPrompt = systemPrompt ?? "";
     this.useToolChoice = options?.useToolChoice ?? true;
+    this.temperature = options?.temperature ?? 0;
   }
 
   /**
@@ -63,13 +72,13 @@ export class AiSdkModel implements LynageModel {
   ): Promise<z.output<S>> {
     if (this.useToolChoice) {
       try {
-        const r = await generateObject({ model: this.model, schema, system, prompt });
+        const r = await generateObject({ model: this.model, schema, system, prompt, temperature: this.temperature });
         return r.object as z.output<S>;
       } catch {
         // Fall through to generateText + JSON parse (works for thinking models)
       }
     }
-    const text = await generateText({ model: this.model, system, prompt: prompt + jsonHint });
+    const text = await generateText({ model: this.model, system, prompt: prompt + jsonHint, temperature: this.temperature });
     const jsonMatch = text.text.match(/\{[\s\S]*?\}/); // non-greedy, first JSON object
     if (jsonMatch) {
       try {
@@ -253,7 +262,7 @@ Does this directory contain information relevant to the user's question? Answer 
 - NO if it's clearly unrelated`;
 
     try {
-      const text = await generateText({ model: this.model, system: this.systemPrompt, prompt, maxTokens: 10 });
+      const text = await generateText({ model: this.model, system: this.systemPrompt, prompt, maxTokens: 10, temperature: this.temperature });
       const t = text.text.trim().toUpperCase();
       return t.startsWith("YES");
     } catch {
@@ -284,7 +293,7 @@ Like a book chapter — decide if this window contains what the user asks about.
 - NO if clearly unrelated`;
 
     try {
-      const text = await generateText({ model: this.model, system: this.systemPrompt, prompt, maxTokens: 10 });
+      const text = await generateText({ model: this.model, system: this.systemPrompt, prompt, maxTokens: 10, temperature: this.temperature });
       const t = text.text.trim().toUpperCase();
       return t.startsWith("YES");
     } catch {

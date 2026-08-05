@@ -11,6 +11,8 @@
 import type { Message } from "./types.js";
 import type { LynageStore } from "./store.js";
 import type { LynageModel, QueryUnderstanding } from "./model.js";
+import type { Embedder } from "./embedder.js";
+import { NoopEmbedder, TrigramEmbedder } from "./embedder.js";
 import { estimateTokenCount } from "./token-counter.js";
 
 // ---- Types ----
@@ -68,10 +70,25 @@ export interface DirectoryTreeNode {
 export class HistoryRetriever {
   private store: LynageStore;
   private model: LynageModel;
+  private embedder: Embedder;
+  private _embeddingCache: Map<string, Float32Array> = new Map();
 
-  constructor(store: LynageStore, model?: LynageModel) {
+  constructor(store: LynageStore, model?: LynageModel, embedder?: Embedder) {
     this.store = store;
     this.model = model ?? ({} as LynageModel);
+    this.embedder = embedder ?? new NoopEmbedder();
+  }
+
+  /**
+   * Swap the semantic embedder at runtime. Used by benchmarks to compare
+   * embedders against the SAME archived DB (archiving is embedder-agnostic,
+   * so rebuilding per-embedder would triple the ingest cost for nothing).
+   * Clears the embedding cache — vectors from a different embedder are
+   * incompatible.
+   */
+  setEmbedder(embedder: Embedder): void {
+    this.embedder = embedder;
+    this._embeddingCache.clear();
   }
 
   /**
@@ -93,11 +110,38 @@ export class HistoryRetriever {
     // First clean topic term only — queries usually lead with "关于X", so the
     // first extracted term is the topic. AND-ing multiple fragment terms kills
     // recall; a single precise term matches the decision chunk's messages.
-    const ftsQuery = extractKeywords(query)[0] || query;
+    const keywords = extractKeywords(query);
+    // Fallback: if all words were stop words, pick the longest word from the
+    // original query (avoids feeding "what"/"the" into FTS).
+    const ftsQuery = keywords[0]
+      || query.split(/\s+/).sort((a, b) => b.length - a.length)[0]
+      || query;
 
     // 1a. FTS on chunk structured summaries → relevant chunk ids (bm25 order)
     const ftsChunkIds = await this.store.searchChunks(ftsQuery, sessionId);
     for (const id of ftsChunkIds) matchedChunkIds.add(id);
+
+    // 1a-bis. When the primary keyword is too common (matches > 40% of chunks),
+    // the result set is noisy. Try a narrower query with the second keyword.
+    // E.g. "deployment" alone matches 3+ chunks; "deployment AND vercel" pinpoints
+    // the decision chunk. This avoids the "AND-ing kills recall" problem by only
+    // using it as a refinement when the first pass is clearly over-matching.
+    const allChunks = await this.store.listChunks(sessionId);
+    if (ftsChunkIds.length > allChunks.length * 0.4 && keywords.length >= 2) {
+      const secondFts = keywords[1];
+      if (secondFts) {
+        const refinedIds = await this.store.searchChunks(secondFts, sessionId);
+        // Intersection: chunks that match BOTH keywords
+        const refinedSet = new Set(refinedIds);
+        const before = matchedChunkIds.size;
+        matchedChunkIds = new Set([...matchedChunkIds].filter(id => refinedSet.has(id)));
+        // If intersection empties the set, keep the original (better recall than nothing)
+        if (matchedChunkIds.size === 0) {
+          // Restore original but limit to top half by BM25 rank (first keyword)
+          matchedChunkIds = new Set(ftsChunkIds.slice(0, Math.ceil(ftsChunkIds.length / 2)));
+        }
+      }
+    }
 
     // 1b. FTS on raw messages → recall supplement (chunks containing hits +
     //     unarchived recent messages as direct candidates)
@@ -107,8 +151,7 @@ export class HistoryRetriever {
     const bestMsgByChunk = new Map<string, string>();
     const ftsMessages = await this.store.searchMessages(ftsQuery, sessionId);
     if (ftsMessages.length > 0) {
-      const chunks = await this.store.listChunks(sessionId);
-      for (const chunk of chunks) {
+      for (const chunk of allChunks) {
         const hits = ftsMessages.filter(
           (m) => m.createdAt >= chunk.timeRangeStart && m.createdAt <= chunk.timeRangeEnd,
         );
@@ -128,7 +171,7 @@ export class HistoryRetriever {
       }
 
       const unarchived = ftsMessages.filter(
-        (m) => !chunks.some((c) => m.createdAt >= c.timeRangeStart && m.createdAt <= c.timeRangeEnd),
+        (m) => !allChunks.some((c) => m.createdAt >= c.timeRangeStart && m.createdAt <= c.timeRangeEnd),
       );
       for (const msg of unarchived.slice(-10)) {
         const relevance = computeRelevance(query, msg.content, []);
@@ -165,6 +208,47 @@ export class HistoryRetriever {
           matchedChunkIds.add(candidate.contextId);
         }
       }
+    }
+
+    // ---- Step 2 (SEMANTIC): embedding search — parallel channel to FTS ----
+    // Lexical FTS misses when query wording ≠ chunk wording (e.g.
+    // "deployment platform" vs "deployment strategy"). Embedding cosine
+    // similarity bridges this gap (~0.5ms local with TrigramEmbedder, zero LLM).
+    const embedScores = new Map<string, number>();
+    if (!(this.embedder instanceof NoopEmbedder)) {
+      try {
+        // Auto-fit TrigramEmbedder on current chunks (idempotent, ~1ms)
+        if (this.embedder instanceof TrigramEmbedder) {
+          (this.embedder as TrigramEmbedder).fit(allChunks.map(c =>
+            c.summary + " " + (c.keywords ?? []).join(" ")));
+        }
+        const qEmb = await this.embedder.embed(query);
+        for (const chunk of allChunks) {
+          if (!this._embeddingCache.has(chunk.id)) {
+            // Embed BOTH the AI summary AND raw message evidence. Summary-only
+            // embedding is why proper-noun answers ("Summer Vibes") were
+            // missed: a multi-topic window's summary drops the answer topic.
+            // Messages are ground truth — the answer text appears verbatim.
+            // bge-small context = 512 tokens, so budget via head+tail: topics
+            // at either end of a long window still get represented.
+            const summary = chunk.summary + " " + (chunk.keywords ?? []).join(" ");
+            let msgText = "";
+            try {
+              const msgs = await this.store.getMessageRange(chunk.sourceFromId, chunk.sourceToId);
+              msgText = msgs.map(m => m.content).join(" ");
+            } catch { /* message fetch is non-fatal */ }
+            const EMBED_BUDGET = 2000;
+            const half = Math.floor(EMBED_BUDGET / 2);
+            const text = summary + " " + msgText;
+            const trimmed = text.length > EMBED_BUDGET
+              ? text.slice(0, half) + " " + text.slice(-half)
+              : text;
+            this._embeddingCache.set(chunk.id, await this.embedder.embed(trimmed));
+          }
+          const sim = this.embedder.similarity(qEmb, this._embeddingCache.get(chunk.id)!);
+          if (sim > 0.15) { matchedChunkIds.add(chunk.id); embedScores.set(chunk.id, sim); }
+        }
+      } catch { /* non-fatal */ }
     }
 
     // ---- Step 2.5 (SEMANTIC RERANK): filter noisy FTS candidates ----
@@ -204,6 +288,50 @@ export class HistoryRetriever {
         if (rerankResult.relevantIds.length > 0) {
           matchedChunkIds = new Set(rerankResult.relevantIds);
         }
+        // Safety net: LLM rerank can return empty or miss the best chunk
+        // (e.g. when query terms don't appear in chunk summaries). Fall back
+        // to computeRelevance ranking — fast, deterministic, keyword-based.
+        if (rerankResult.relevantIds.length <= 1 && allMatched.length > 1) {
+          // Find the top computeRelevance chunk as backstop
+          let bestId = allMatched[0]!.id;
+          let bestScore = -1;
+          for (const chunk of allMatched) {
+            const s = Math.max(
+              computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals),
+              msgRelevanceByChunk.get(chunk.id) ?? 0,
+            );
+            if (s > bestScore) { bestScore = s; bestId = chunk.id; }
+          }
+          if (rerankResult.relevantIds.length === 0) {
+            // Rerank returned NOTHING — but that can mean the LLM's evidence
+            // (FTS message snippets) was wrong, not that history lacks the
+            // answer. Distinguish the two via the embedding channel's strongest
+            // match: a genuinely strong similarity means rerank likely missed a
+            // real chunk (keep the top-N by blended relevance instead of
+            // collapsing to one — collapsing buried proper-noun answers like
+            // "Summer Vibes"). A weak max similarity means nothing relevant
+            // exists — collapse to the single best keyword candidate to avoid
+            // flooding the LLM with noise (and hallucinating from it).
+            const maxEmb = embedScores.size > 0 ? Math.max(...embedScores.values()) : 0;
+            if (maxEmb >= this.embedder.confidenceThreshold) {
+              const scored = allMatched.map(chunk => ({
+                id: chunk.id,
+                s: Math.max(
+                  computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals),
+                  msgRelevanceByChunk.get(chunk.id) ?? 0,
+                  (embedScores.get(chunk.id) ?? 0) * 0.8,
+                ),
+              })).sort((a, b) => b.s - a.s);
+              matchedChunkIds = new Set(scored.slice(0, 6).map(x => x.id));
+            } else {
+              // No genuine semantic match — trust computeRelevance ranking
+              matchedChunkIds = new Set([bestId]);
+            }
+          } else if (bestScore > 0) {
+            // Rerank found 1 — add computeRelevance best as backup
+            matchedChunkIds.add(bestId);
+          }
+        }
       } catch {
         // Keep original candidates on rerank failure
       }
@@ -213,11 +341,16 @@ export class HistoryRetriever {
     const matchedChunks = await this.store.getChunksByIds([...matchedChunkIds]);
     for (const chunk of matchedChunks) {
 
-      // Compute relevance score: max(summary match, raw-message match).
-      // Summaries drift; a chunk matched by its source messages is ground truth.
+      // Compute relevance: blend FTS (lexical) + embedding (semantic) + message match.
+      // FTS: precise keyword hits (0-1), Embedding: semantic similarity (0-1),
+      // Message: ground-truth raw message match (0-1). Take best of all three;
+      // FTS+embedding combo often catches what neither catches alone.
       const summaryRel = computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals);
       const msgRel = msgRelevanceByChunk.get(chunk.id) ?? 0;
-      const relevance = Math.max(summaryRel, msgRel);
+      const embedRel = embedScores.get(chunk.id) ?? 0;
+      const relevance = Math.max(summaryRel, msgRel, embedRel * 0.8);
+      // Scale embedding down 0.8× — semantic similarity is softer signal than
+      // exact keyword match (0.25 per term), so a 0.5 cosine → 0.4 composite.
 
       candidates.push({
         contextId: chunk.id,
@@ -510,12 +643,38 @@ export class HistoryRetriever {
 
 // ---- Helpers ----
 
+// English stop words — shared between extractKeywords and computeRelevance.
+// Without this, "What is the user's favorite language?" → ["What","is","the"]
+// before it ever reaches a content word.
+const ENGLISH_STOP = new Set([
+  "what","which","when","where","who","whom","why","how",
+  "is","are","was","were","be","been","being","have","has","had",
+  "do","does","did","will","would","shall","should","can","could",
+  "may","might","must","the","a","an","this","that","these","those",
+  "it","its","i","me","my","we","our","you","your","he","she","they",
+  "him","her","us","them","his","hers","mine","yours","ours","theirs",
+  "not","no","nor","or","and","but","if","then","else","of","in","on",
+  "to","for","with","about","at","from","by","as","into","than",
+  "also","just","now","only","very","really","some","any","each","every",
+  "all","both","few","more","most","other","such","much",
+  "did","does","doing","done","get","got","getting",
+  "s","t","don","doesn","isn","aren","wasn","weren",
+  // Query verbs & generic nouns — high semantic value for humans but near-zero
+  // discriminative power for chunk matching. Filtered from FTS + computeRelevance
+  // so they don't add noise; the LLM rerank still receives the full query.
+  "user","users",
+  "choose","chose","chosen","choosing",
+  "decide","decided","deciding","decision",
+  "ultimately","finally","eventually",
+]);
+
 /**
  * Cheap CJK/Latin keyword extraction — NO LLM. Strips query fillers and
  * keeps topic words (≥2 chars) for the FTS fast path. Mirrors the
  * analyzeSearchQuery LLM fallback, but runs in ~0ms.
  */
 function extractKeywords(query: string): string[] {
+
   // Strip fillers + particles + sentence fragments aggressively, but NEVER
   // content words like 方案/决定 (part of compound topics "样式方案").
   // Goal: leave clean 2-6 char topic terms — "关于数据库的事...怎么定的"
@@ -523,9 +682,14 @@ function extractKeywords(query: string): string[] {
   const cleaned = query
     .replace(/[记不清|怎么|定了|最后|哪个|是不是|中间|换了|什么|我们|你们|他们|当时|关于|现在|记得|帮我|看看|以前|之前|后来|然后|已经|到底|结果|回事|真的|应该|可能|觉得|认为|时候|的话|还是|还有|或者|但是|可是|所以|因为|如果|虽然|而且|一开始|一个|一下|一次|这个|那个|这些|那些|别的|用了|的事|的东西|的事情]/g, " ")
     .replace(/[^\w\s一-鿿぀-ゟ]/g, " ");
-  const terms = cleaned.split(/\s+/).filter((t) => t.length >= 2 && t.length <= 6);
-  // Keep unique, up to 3 terms
-  return [...new Set(terms)].slice(0, 3);
+  const terms = cleaned.split(/\s+/)
+    .filter((t) => t.length >= 2 && t.length <= 6)
+    .filter((t) => !ENGLISH_STOP.has(t.toLowerCase()));
+  // Keep unique, up to 3 terms. Prefer longer words — they carry
+  // more signal (e.g. "programming" > "user" > "what").
+  const unique = [...new Set(terms)];
+  unique.sort((a, b) => b.length - a.length);
+  return unique.slice(0, 3);
 }
 
 /**
@@ -540,15 +704,25 @@ function computeRelevance(query: string, text: string, keywords: string[], concl
   if (goals) searchTexts.push(goals.join(" ").toLowerCase());
   const combined = searchTexts.join(" ");
 
-  // Latin terms: split by space (word boundaries preserved)
-  const latinTerms = queryLower.split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+  // Latin terms: split by space (word boundaries preserved).
+  // Filter English stop words — same as extractKeywords, so "the"/"and"
+  // don't match unrelated chunks and inflate relevance scores.
+  const latinTerms = queryLower.split(/[^a-z0-9]+/).filter((w) => w.length > 1 && !ENGLISH_STOP.has(w));
   let score = 0;
   let matched = 0;
 
   for (const term of latinTerms) {
-    if (combined.includes(term)) {
-      score += 0.25;
-      matched++;
+    // Word-boundary match: "language" should match "programming language"
+    // but not "metalanguage". Falls back to includes() for short/edge cases.
+    try {
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp("\\b" + escaped + "\\b", "i").test(combined)) {
+        score += 0.25;
+        matched++;
+      }
+    } catch {
+      // Degenerate regex (unlikely) — fall back to simple includes
+      if (combined.includes(term)) { score += 0.25; matched++; }
     }
   }
 

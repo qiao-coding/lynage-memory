@@ -11,3 +11,6 @@ data/
 
 # benchmark run logs
 benchmarks/baseline/*.txt
+
+# benchmark run artifacts (per-question eval result JSONs)
+benchmarks/**/results/
