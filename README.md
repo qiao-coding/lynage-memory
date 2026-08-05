@@ -52,19 +52,7 @@ Lynage takes a fundamentally different approach to agent memory. Instead of comp
 
 ### 10,000-Turn Stress Test (DeepSeek V4 Flash, validated at 2,000 turns)
 
-50 facts embedded across 2,000 turns. 10 forget-style questions ("What did we decide about X? Didn't we try something else first?"). Reproduced in-repo: Lynage answers from tree summaries (`benchmarks/baseline/bench-10k.ts`); Flat FTS is a message-level keyword baseline via `search_messages` top-5 (`bench-flat.ts`).
-
-**Fair benchmark** — verbatim keywords, easy retrieval:
-
-| Metric | Lynage | Flat FTS (baseline) |
-|---|---|---|
-| Accuracy | **100%** (10/10) | 90% (9/10) |
-| Hallucination | **0** | 1 |
-| Search Latency | ~6,200ms (incl. LLM rerank) | ~1ms |
-| Input Tokens (10 Q) | 9,774 (tree summaries) | 4,275 (top-5 messages) |
-| Total Cost (10 Q) | **¥0.014** | ¥0.007 |
-
-> On easy verbatim-keyword questions, Flat FTS is competitive — both recover the answer, Lynage wins accuracy but pays more tokens and latency. **This benchmark is NOT Lynage's differentiator.** The honest performance comparison (token/latency) is context-construction dependent; the "6ms / 8× fewer tokens" figures sometimes quoted came from a summary-only fast path, not this end-to-end run.
+50 facts embedded across 2,000 turns. Reproduced in-repo: Lynage answers from tree summaries (`benchmarks/baseline/bench-10k.ts`); Flat FTS is a message-level keyword baseline via `search_messages` top-5 (`bench-flat.ts`).
 
 **Forget-style benchmark** — decision process buried in noise ("what did we pick? didn't we try something else first?"):
 
