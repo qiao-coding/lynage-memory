@@ -48,6 +48,10 @@ interface Turn { u: string; a: string }
 function generateChapters(): { turns: Turn[]; details: Detail[] } {
   // 5 chapters × 30 turns of Chinese Galgame dialogue.
   // Details are embedded verbatim in specific turns.
+  // Details live in CHAPTERS 1-4 (already past). Chapter 5 is the "generate
+  // now" target: the generator must RECALL early-chapter detail from memory,
+  // not find it in the recent window (where compression already wins). This is
+  // the scene Lynage exists for.
   const details: Detail[] = [
     // 台词 (exact lines a character said)
     { type: "台词", question: "零说过关于海的话吗？她的原话是什么？", keyPhrase: "陪你去海边看日落", chapter: 1 },
@@ -60,11 +64,11 @@ function generateChapters(): { turns: Turn[]; details: Detail[] } {
     // 伏笔 (foreshadows planted early)
     { type: "伏笔", question: "零口袋里一直带着什么？她提过吗？", keyPhrase: "一把旧钥匙", chapter: 2 },
     { type: "伏笔", question: "关于零的笔记本，透露过什么？", keyPhrase: "夹着一张褪色的照片", chapter: 4 },
-    { type: "伏笔", question: "零害怕的东西是什么？", keyPhrase: "怕打雷", chapter: 5 },
+    { type: "伏笔", question: "零害怕的东西是什么？", keyPhrase: "怕打雷", chapter: 2 },
     // 角色记忆 (what one character told another)
     { type: "角色记忆", question: "男主对零说过他小时候的事吗？", keyPhrase: "小时候养过一只猫", chapter: 2 },
     { type: "角色记忆", question: "零对男主讲过她的生日吗？", keyPhrase: "生日是十一月", chapter: 3 },
-    { type: "角色记忆", question: "男主说过他为什么怕水吗？", keyPhrase: "掉进过池塘", chapter: 5 },
+    { type: "角色记忆", question: "男主说过他为什么怕水吗？", keyPhrase: "掉进过池塘", chapter: 4 },
   ];
 
   // Chapter themes: 1初遇 2相处 3出行 4回忆 5离别
@@ -166,6 +170,16 @@ async function main() {
   const hasLatinWords = /[a-zA-Z]{4,}/.test(sampleSummary);
   console.log(`Summary language: ${hasHan && !hasLatinWords ? "中文 ✅" : hasHan ? "混合 ⚠️" : "英文 ❌"} | "${sampleSummary.slice(0, 60)}"`);
 
+  // 2b. Compression baseline: hand the generator the most recent W messages
+  // (the "last N rounds" window a context-compression system would keep).
+  // Details planted in chapters 1-4 should be OUTSIDE this window — showing
+  // compression can't recall the past, which is exactly Lynage's job.
+  const WINDOW = 40;
+  const recent = await memory.store.getRecent({ sessionId: SID });
+  const windowText = recent.slice(0, WINDOW).map((m) => m.content).join("\n");
+  const compHits = details.filter((d) => windowText.includes(d.keyPhrase)).length;
+  console.log(`Compression baseline (last ${WINDOW} msgs): ${compHits}/${details.length} (${(compHits / details.length * 100).toFixed(0)}%)`);
+
   // 3. Recall@prompt
   const byType: Record<string, { hit: number; total: number }> = {};
   for (const d of details) {
@@ -198,17 +212,18 @@ async function main() {
   console.log(`\n${"=".repeat(55)}`);
   console.log(`Galgame recall@prompt results`);
   console.log(`Turn count: ${turns.length}  Chunks: ${stats.chunkCount}`);
+  console.log(`Compression baseline (last ${WINDOW} msgs): ${compHits}/${total} (${(compHits / total * 100).toFixed(0)}%)`);
   console.log(`A. Summary-only context: ${hitSumA}/${total} (${(hitSumA / total * 100).toFixed(0)}%)`);
   console.log(`B. Summary + raw messages: ${hitSumB}/${total} (${(hitSumB / total * 100).toFixed(0)}%)`);
   console.log(`\nBy type (full context):`);
   for (const [type, v] of Object.entries(byType)) {
     console.log(`   ${type}: ${v.hit}/${v.total} (${(v.hit / v.total * 100).toFixed(0)}%)`);
   }
-  console.log(`\nInsight: A vs B gap = details that survive ONLY in raw messages,`);
-  console.log(`not AI summaries — the case for the message-level index + source opening.`);
+  console.log(`\nInsight: B beats the compression baseline when early-chapter detail`);
+  console.log(`(outside the recent window) is recalled — that is Lynage's reason to exist.`);
 
   fs.writeFileSync(path.resolve(process.cwd(), "data", "galgame-recall.json"),
-    JSON.stringify({ turns: turns.length, chunks: stats.chunkCount, total, sumOnly: hitSumA, full: hitSumB, byType, rows }, null, 2));
+    JSON.stringify({ turns: turns.length, chunks: stats.chunkCount, total, compression: compHits, sumOnly: hitSumA, full: hitSumB, byType, rows }, null, 2));
   try { fs.unlinkSync(dbPath); } catch {}
 }
 main().catch((e) => { console.error("❌", e); process.exit(1); });
