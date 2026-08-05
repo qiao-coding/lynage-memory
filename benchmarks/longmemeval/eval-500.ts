@@ -55,7 +55,7 @@ async function processQuestion(inst: Instance, idx: number, embedder: Embedder):
   const memory = createLynageMemory({
     model: new AiSdkModel(model, undefined, { useToolChoice: false }),
     dbPath: DB_PATH,
-    config: { archiveThreshold: 12000, retainTokens: 12000, directoryCapacity: 10 },
+    config: { archiveThreshold: 16000, retainTokens: 16000, directoryCapacity: 10 },
     embedder,
   });
 

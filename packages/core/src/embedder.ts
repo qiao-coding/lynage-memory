@@ -105,9 +105,20 @@ export class TransformersEmbedder implements Embedder {
     await this._ready;
   }
 
+  // bge-small context = 512 tokens (~2000 chars). Anything longer is truncated
+  // by the model anyway, so truncating BEFORE inference avoids tokenizing and
+  // running the transformer over thousands of tokens — semantically identical,
+  // orders of magnitude faster for long archive messages.
+  private static readonly MAX_CHARS = 1800;
+  private static truncate(text: string): string {
+    return text.length > TransformersEmbedder.MAX_CHARS
+      ? text.slice(0, TransformersEmbedder.MAX_CHARS)
+      : text;
+  }
+
   async embed(text: string): Promise<Float32Array> {
     await this._ensureReady();
-    const result = await this._pipeline(text, {
+    const result = await this._pipeline(TransformersEmbedder.truncate(text), {
       pooling: "mean",
       normalize: true,
     });
@@ -117,16 +128,23 @@ export class TransformersEmbedder implements Embedder {
 
   async embedBatch(texts: string[]): Promise<Float32Array[]> {
     await this._ensureReady();
-    // Process in parallel with concurrency limit to avoid OOM
-    const results: Float32Array[] = [];
-    for (let i = 0; i < texts.length; i += 4) {
-      const batch = texts.slice(i, i + 4);
-      const batchResults = await Promise.all(
-        batch.map((t) => this.embed(t)),
-      );
-      results.push(...batchResults);
+    // TRUE batched inference: the transformers.js pipeline accepts an array
+    // input and returns a [batch, dim] tensor in ONE vectorized pass. (The old
+    // Promise.all-of-4 approach ran N separate CPU inferences, near-serial.)
+    const out: Float32Array[] = [];
+    const BATCH = 8;
+    for (let i = 0; i < texts.length; i += BATCH) {
+      const slice = texts.slice(i, i + BATCH).map(TransformersEmbedder.truncate);
+      const result = await this._pipeline(slice, {
+        pooling: "mean",
+        normalize: true,
+      });
+      const dim = result.dims[1];
+      for (let j = 0; j < slice.length; j++) {
+        out.push(new Float32Array(result.data.subarray(j * dim, (j + 1) * dim)));
+      }
     }
-    return results;
+    return out;
   }
 
   similarity(a: Float32Array, b: Float32Array): number {
