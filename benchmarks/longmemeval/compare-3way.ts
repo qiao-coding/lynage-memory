@@ -92,7 +92,9 @@ async function main() {
     }
     await memory.waitForArchiving(SID);
 
-    const answerTerms = inst.answer.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3);
+    // >= 2 (not > 3): numeric answers like "$800" are 3 chars and must not be
+    // filtered out — otherwise the recall metric can never see the answer.
+    const answerTerms = inst.answer.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 2);
 
     // Search with all 3 embedders on the SAME DB
     const recalled: { pool: boolean; top3: boolean }[] = [];

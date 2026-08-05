@@ -109,10 +109,19 @@ async function processQuestion(inst: Instance, idx: number, embedder: Embedder):
     const open = await memory.openSource(cand.contextId);
     if (!open) continue;
     const msgs = open.messages;
-    // Selection: hit messages + first/last + every-other for dense coverage.
-    // Answers in LongMemEval live anywhere in a 10-45 message chunk; the
-    // denser the coverage the better the chance the answer text reaches the LLM.
+    // Selection: message-level index hits (P2 — the answer message usually has
+    // the highest embedding similarity) FIRST, then query-hit messages, then
+    // first/last + every-other for dense coverage. Answers in LongMemEval live
+    // anywhere in a 10-45 message chunk; prioritizing the semantically-matched
+    // message gets the answer text into context without noise.
     const hitIdx = new Set<number>();
+    if (cand.topMessageIds?.length) {
+      const idToIdx = new Map(msgs.map((m, i) => [m.id, i] as const));
+      for (const id of cand.topMessageIds) {
+        const idx = idToIdx.get(id);
+        if (idx !== undefined) hitIdx.add(idx);
+      }
+    }
     let totalHits = 0;
     msgs.forEach((m, i) => {
       const hits = qTerms.filter(t => m.content.toLowerCase().includes(t)).length;
@@ -160,14 +169,14 @@ async function processQuestion(inst: Instance, idx: number, embedder: Embedder):
     console.error(ctx.slice(-1500));
     console.error("===== END =====\n");
   }
-  const truncated = ctx.length > 14000 ? ctx.slice(0, 14000) + "\n[...truncated]" : ctx;
+  const truncated = ctx.length > 16000 ? ctx.slice(0, 16000) + "\n[...truncated]" : ctx;
   const systemPrompt = ctx
     ? `Answer based ONLY on the history below. Use timestamps (YYYY-MM-DD) for temporal questions. If answer not in history, say "Not found in history."\n\n---\n${truncated}`
     : "No history found. Say so.";
 
   // Recall@context: does the answer appear in the context we gave the LLM?
   const ctxLower = truncated.toLowerCase();
-  const ctxTerms = inst.answer.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3);
+  const ctxTerms = inst.answer.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 2);
   const ctxHits = ctxTerms.filter(t => ctxLower.includes(t)).length;
   const recallInContext = ctxTerms.length > 0 && ctxHits / ctxTerms.length >= 0.5;
 
@@ -188,7 +197,7 @@ async function processQuestion(inst: Instance, idx: number, embedder: Embedder):
   // so if the LLM says INCORRECT we fall back to lexical verification.
   const actualLower = actual.toLowerCase();
   const isAbs = inst.question_id.endsWith("_abs");
-  const keyTerms = inst.answer.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3);
+  const keyTerms = inst.answer.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 2);
   const kwHits = keyTerms.filter(t => actualLower.includes(t)).length;
   const kwPass = keyTerms.length > 0 && kwHits / keyTerms.length >= 0.5;
   // Abstention: correct behavior is to deny having the info

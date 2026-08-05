@@ -54,41 +54,41 @@ LongMemEval tests **five core memory abilities** across 500 curated questions. W
 
 | Metric | Result |
 |---|---|
-| **Retrieval recall** (answer chunk in candidates) | **~100%** with semantic embedding |
+| **Retrieval recall** (answer chunk in candidates) | **100%** (12/12 on a 12-question sample, with semantic embedding) |
+| **Answer reaches context** (recall@context) | **75%** (9/12 on the same sample) |
 | **10,000-turn stress test** | **100% accuracy, fixed cost** |
 
-> **What this proves:** Lynage's retrieval recovers the **answer chunk from ~40-60 session haystacks** — with the semantic channel enabled, FTS + bge embedding match the answer-bearing window nearly every time. Retrieval is the retrieval layer's job; answer extraction accuracy is bounded by the downstream LLM, not by Lynage.
+> **What this proves:** Lynage's retrieval recovers the **answer chunk from ~40-60 session haystacks** (12/12 on a 12-question sample, including top-3 hits). The earlier "~80% recall" figure was an artifact of an **LLM-rerank pool-collapse bug** — the retrieval layer (FTS + semantic embedding) matches far more than that, but when the rerank's evidence was wrong it collapsed the candidate pool to one chunk, dropping the answer. After the fix + message-level semantic index, proper-noun questions (playlist / yoga) and a numeric question ("$800") all recover. **Retrieval and context are Lynage's job (100% + 75%); answer extraction accuracy is bounded by the downstream LLM, not by Lynage** — on the 12-question sample flash extracted only 2/12 even with the answer in context.
 >
 > **Why LongMemEval doesn't showcase Lynage's tree:** Each question's haystack is only ~115k tokens — *medium-scale* retrieval where a flat index suffices. Lynage's tree delivers **logarithmic-depth search and fixed context cost**, which is what matters at **10,000+ turns** (see the stress test below). At that scale the tree compresses history into ~3 directory levels while keeping LLM context at ~800 tokens — a property no flat-index system has.
 >
 > **On temporal reasoning:** The tree structure encodes the timeline natively (every chunk has `timeRange`, every message has `createdAt`). Once timestamps are passed to the LLM, temporal comparison becomes simple date math: *"TypeScript was decided first, on 2024-06-11. The deployment platform was brought up later, on 2024-06-12."* No LLM reasoning needed.
 
-### 10,000-Turn Stress Test (DeepSeek V4 Flash)
+### 10,000-Turn Stress Test (DeepSeek V4 Flash, validated at 2,000 turns)
 
-50 facts embedded across 10,000 turns. 10 forget-style questions ("What did we decide about X? Didn't we try something else first?"). Flat FTS is a message-level keyword-search baseline (no tree, no compression).
+50 facts embedded across 2,000 turns. 10 forget-style questions ("What did we decide about X? Didn't we try something else first?"). Reproduced in-repo: Lynage answers from tree summaries (`benchmarks/baseline/bench-10k.ts`); Flat FTS is a message-level keyword baseline via `search_messages` top-5 (`bench-flat.ts`).
+
+**Fair benchmark** — verbatim keywords, easy retrieval:
 
 | Metric | Lynage | Flat FTS (baseline) |
 |---|---|---|
-| Accuracy | **100%** (10/10) | 100% (10/10) |
-| Hallucination | **0%** | 0% |
-| Search Latency | **6ms** | 12ms |
-| Input Tokens (10 Q) | **2,929** | 23,564 |
-| Total Cost (10 Q) | **¥0.006** | ¥0.028 |
-| Cost Ratio | **1×** | 4.7× |
+| Accuracy | **100%** (10/10) | 90% (9/10) |
+| Hallucination | **0** | 1 |
+| Search Latency | ~6,200ms (incl. LLM rerank) | ~1ms |
+| Input Tokens (10 Q) | 9,774 (tree summaries) | 4,275 (top-5 messages) |
+| Total Cost (10 Q) | **¥0.014** | ¥0.007 |
 
-> Both achieve perfect accuracy — the data is synthetic with verbatim keywords. Lynage's advantage is **token efficiency**: the tree structure returns precise chunk summaries instead of raw message windows, reducing input tokens by **8×**. This gap widens linearly with conversation length.
+> On easy verbatim-keyword questions, Flat FTS is competitive — both recover the answer, Lynage wins accuracy but pays more tokens and latency. **This benchmark is NOT Lynage's differentiator.** The honest performance comparison (token/latency) is context-construction dependent; the "6ms / 8× fewer tokens" figures sometimes quoted came from a summary-only fast path, not this end-to-end run.
 
-### Forget-Style Benchmark (Noise Resilience)
-
-Questions that require retrieving a *decision process* from noise: "What did we pick? Didn't we try something else first? Why did we switch?" Flat FTS uses `search_messages` with default top-5 truncation.
+**Forget-style benchmark** — decision process buried in noise ("what did we pick? didn't we try something else first?"):
 
 | Metric | Lynage | Flat FTS (baseline) |
 |---|---|---|
 | Accuracy | **90%** (9/10) | 0% (0/10) |
-| Hallucination | 0% | 0% |
+| Hallucination | 0 | 0 |
 | Answer Quality | Full process narrative | "Not mentioned in history" |
 
-> Flat FTS returns top-5 matches only — the decision messages are buried by noise (topic keywords appear in 98% of turns). Lynage returns ALL FTS matches plus embedding candidates, so the decision chunk always enters the pool. This is a **retrieval robustness** advantage, not a model quality difference.
+> Flat FTS gets **0%** because `search_messages` trigram FTS cannot parse vague natural-language questions ("我记不太清了…是不是…怎么定的") — filler words break the match, returning zero results. Lynage's `extractKeywords` strips fillers and keeps the topic term, finds the decision chunk, and narrates the full process (tried A → abandoned → chose C). This is the **retrieval robustness** advantage — on a 2,000-turn session with 4,000 messages, Lynage recovers the decision 9/10 while flat recovers nothing.
 
 ### Why Lynage Is Different
 

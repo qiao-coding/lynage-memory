@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { HistoryRetriever, type SearchResult } from "./history-retriever.js";
 import type { LynageStore, Message, ContextChunk, DirectoryNode, WorkingMemory } from "./index.js";
 import type { Embedder } from "./embedder.js";
+import { NoopEmbedder } from "./embedder.js";
 import type { LynageModel } from "./model.js";
 
 // Embedder mock: records every text it was asked to embed, returns a fixed
@@ -28,6 +29,13 @@ const rerankEmptyModel = {
   rerankCandidates: async () => ({ relevantIds: [] as string[], reasoning: "none" }),
 } as unknown as LynageModel;
 
+// Model mock that COUNTS rerank invocations — used to assert the confidence
+// gate skips the LLM call on unambiguous queries and hits the cache on repeats.
+class CountingRerankModel {
+  rerankCalls = 0;
+  rerankCandidates = async () => { this.rerankCalls++; return { relevantIds: [] as string[], reasoning: "counted" }; };
+}
+
 // Minimal mock store for testing
 class MockStoreForSearch implements LynageStore {
   messages: Message[] = [];
@@ -45,6 +53,8 @@ class MockStoreForSearch implements LynageStore {
   }
   async getMessagesAround() { return []; }
   async getMessageCount() { return this.messages.length; }
+  async saveMessageEmbeddings() {}
+  async getMessageEmbeddings(): Promise<{ messageId: string; vector: Float32Array; createdAt: number }[]> { return []; }
   async createChunk() { return {} as ContextChunk; }
   async getChunk(id: string) { return this.chunks.get(id) ?? null; }
   async getChunksByIds(ids: string[]) { return ids.map(id => this.chunks.get(id)).filter((c): c is NonNullable<typeof c> => c != null); }
@@ -285,5 +295,93 @@ describe("HistoryRetriever rerank-collapse", () => {
     // The embedding channel must have read the chunk's source messages
     // (getMessageRange), so the answer text appears in what was embedded.
     expect(recorder.seen.some((t) => t.includes("summer vibes"))).toBe(true);
+  });
+
+  it("uses the message-level index when it exists (no per-chunk embedding)", async () => {
+    const store = new MockStoreForSearch();
+    seedTwoChunks(store);
+    // Precomputed message index: m1 → c1 (createdAt 1000), m3 → c2 (3000).
+    store.getMessageEmbeddings = async () => [
+      { messageId: "m1", vector: new Float32Array([1, 0]), createdAt: 1000 },
+      { messageId: "m3", vector: new Float32Array([1, 0]), createdAt: 3000 },
+    ];
+    const recorder = new RecordingEmbedder(0.5);
+    const retriever = new HistoryRetriever(store, rerankEmptyModel, recorder);
+
+    const result = await retriever.search({ query: "what is the name of the spotify playlist", sessionId: "s1" });
+
+    // Message index path: ONLY the query was embedded — no per-chunk embeds.
+    expect(recorder.seen.length).toBe(1);
+    expect(recorder.seen[0]).toBe("what is the name of the spotify playlist");
+    // Both chunks matched via their embedded messages.
+    expect(result.candidates.length).toBeGreaterThanOrEqual(2);
+    // The top message ids are recorded on the candidates (Phase B input).
+    expect(result.candidates.some((c) => (c.topMessageIds ?? []).includes("m1"))).toBe(true);
+    expect(result.candidates.some((c) => (c.topMessageIds ?? []).includes("m3"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Confidence gate (search latency): the ~5s LLM rerank must be skipped when
+// retrieval already has a clear leader, and cached for repeated ambiguous
+// queries. `ambiguous=true` seeds two near-identical chunks so the blended
+// scores tie; `false` seeds a clear winner.
+// ---------------------------------------------------------------------------
+
+function seedGateStore(store: MockStoreForSearch, ambiguous: boolean) {
+  store.messages = [
+    { id: "m1", sessionId: "s1", role: "user", content: "we chose the spotify playlist", createdAt: 1000 },
+    { id: "m2", sessionId: "s1", role: "assistant", content: "good call", createdAt: 2000 },
+    { id: "m3", sessionId: "s1", role: "user", content: ambiguous ? "the spotify playlist option" : "about the playlist preference", createdAt: 3000 },
+    { id: "m4", sessionId: "s1", role: "assistant", content: "ok", createdAt: 4000 },
+  ];
+  const mk = (id: string, summary: string, from: string, to: string, ts: number): ContextChunk => ({
+    id, sessionId: "s1", timeRangeStart: ts, timeRangeEnd: ts + 1000,
+    summary, progress: "", keywords: [], conclusions: [], goals: [],
+    sourceFromId: from, sourceToId: to, createdAt: ts + 2000,
+  });
+  store.chunks.set("c1", mk("c1", ambiguous ? "the spotify playlist decision" : "the spotify playlist decision was made", "m1", "m2", 1000));
+  store.chunks.set("c2", mk("c2", ambiguous ? "the playlist spotify choice" : "playlist preferences", "m3", "m4", 3000));
+  // Fillers keep the FTS match rate below 40% so the 1a-bis refinement doesn't
+  // collapse the pool before the gate can be exercised.
+  for (let i = 0; i < 6; i++) {
+    store.chunks.set(`f${i}`, mk(`f${i}`, `filler topic ${i}`, `fx${i}`, `fy${i}`, 10000 + i * 1000));
+  }
+}
+
+describe("HistoryRetriever rerank confidence gate", () => {
+  it("skips the LLM rerank when retrieval is confident", async () => {
+    const store = new MockStoreForSearch();
+    seedGateStore(store, false);
+    const counting = new CountingRerankModel();
+    const retriever = new HistoryRetriever(store, counting as unknown as LynageModel, new NoopEmbedder());
+
+    const result = await retriever.search({ query: "spotify playlist", sessionId: "s1" });
+
+    expect(counting.rerankCalls).toBe(0);
+    expect(result.candidates.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("runs the LLM rerank when candidates are ambiguous", async () => {
+    const store = new MockStoreForSearch();
+    seedGateStore(store, true);
+    const counting = new CountingRerankModel();
+    const retriever = new HistoryRetriever(store, counting as unknown as LynageModel, new NoopEmbedder());
+
+    await retriever.search({ query: "spotify playlist", sessionId: "s1" });
+
+    expect(counting.rerankCalls).toBe(1);
+  });
+
+  it("serves repeated ambiguous queries from cache (one rerank call total)", async () => {
+    const store = new MockStoreForSearch();
+    seedGateStore(store, true);
+    const counting = new CountingRerankModel();
+    const retriever = new HistoryRetriever(store, counting as unknown as LynageModel, new NoopEmbedder());
+
+    await retriever.search({ query: "spotify playlist", sessionId: "s1" });
+    await retriever.search({ query: "spotify playlist", sessionId: "s1" });
+
+    expect(counting.rerankCalls).toBe(1);
   });
 });

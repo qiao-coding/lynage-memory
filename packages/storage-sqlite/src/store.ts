@@ -136,6 +136,39 @@ export class SqliteStore implements LynageStore {
     return result[0]?.cnt ?? 0;
   }
 
+  async saveMessageEmbeddings(rows: { messageId: string; sessionId: string; vector: Float32Array }[]): Promise<void> {
+    if (rows.length === 0) return;
+    const stmt = this.raw.prepare(
+      `INSERT OR REPLACE INTO message_embeddings (message_id, session_id, vector, dim)
+       VALUES (?, ?, ?, ?)`,
+    );
+    // better-sqlite3 batches inserts in one transaction implicitly when inside
+    // a single statement; chunk to avoid huge single transactions on 10k+ rows.
+    for (let i = 0; i < rows.length; i += 500) {
+      const chunk = rows.slice(i, i + 500);
+      this.raw.transaction(() => {
+        for (const r of chunk) {
+          const buf = Buffer.from(r.vector.buffer, r.vector.byteOffset, r.vector.byteLength);
+          stmt.run(r.messageId, r.sessionId, buf, r.vector.length);
+        }
+      })();
+    }
+  }
+
+  async getMessageEmbeddings(sessionId: string): Promise<{ messageId: string; vector: Float32Array; createdAt: number }[]> {
+    const rows = this.raw.prepare(
+      `SELECT me.message_id, me.vector, me.dim, m.created_at
+       FROM message_embeddings me
+       JOIN messages m ON m.id = me.message_id
+       WHERE me.session_id = ?`,
+    ).all(sessionId) as Array<{ message_id: string; vector: Buffer; dim: number; created_at: number }>;
+    return rows.map((r) => {
+      const buf = r.vector as Buffer;
+      const arr = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+      return { messageId: r.message_id, vector: arr.slice(), createdAt: r.created_at };
+    });
+  }
+
   async getEstimatedTokenCount(
     sessionId: string,
     sinceId?: string,

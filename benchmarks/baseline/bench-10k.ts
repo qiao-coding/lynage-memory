@@ -77,10 +77,11 @@ for(let i=0;i<questions.length;i++){const q=questions[i]!;
   const s0=performance.now();const sr=await mem.search({query:q.search,sessionId:"s1"});ts+=performance.now()-s0;
   searchedDirs+=sr.searchedDirectories;checkedChunks+=sr.totalChunksChecked;
   if(sr.totalChunksChecked>0)treeHits++; // search actually descended the tree
-  // Return FULL chunk originals (symmetric with Hermes' full window)
-  let msgs:any[]=[];
-  for(let ci=0;ci<Math.min(sr.candidates.length,3);ci++){const or=await mem.openSource(sr.candidates[ci]!.contextId);if(or)msgs.push(...or.messages);}
-  const cx=msgs.map((x:any)=>`[${x.role}] ${x.content}`).join("\n");
+  // Lynage's native context: tree summaries + candidate metadata (NOT full raw
+  // message windows). This is the differentiator — fixed-size context regardless
+  // of conversation length. The Hermes symmetry rationale no longer applies
+  // (README dropped the Hermes comparison as a different arena).
+  const cx=mem.compileRetrievedContext(sr);
   const l0=performance.now();const an=await ask(`根据对话历史回答，用中文。\n---\n${cx}\n---\n${q.q}`);tl+=performance.now()-l0;
   ti+=an.input;to+=an.output;
   const j=await judge(q.q,an.text,q.fact,q.wrong);if(j.ok)acc++;if(j.hal)hal++;

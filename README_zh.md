@@ -7,10 +7,9 @@
 
 **AI Agent 长对话记忆系统 — 无限对话历史，固定 LLM 成本。**
 
-[English](README.md) · [快速开始](#-快速开始) · [基准测试](#-基准测试结果) · [架构](docs/02-how-it-works.md) · [API](#-api-参考)
+[English](README.md)
 
-
----
+***
 
 ## 🧠 概述
 
@@ -43,69 +42,69 @@ Lynage 对 Agent 记忆采取了根本不同的思路。不把旧对话压缩成
 2. **分块是导航索引，不是压缩** — AI 为每个对话片段生成结构化元数据（摘要、结论、目标、关键词）。摘要引导搜索；`source_from_id → source_to_id` 指针打开原文验证。
 3. **树自动生长** — 分块超容量自动建目录，目录超容量自动升代（G0→G1→G2→...）。分支因子 B=20，10,000 个分块仅 3 层深度。
 
----
+***
 
 ## 📊 基准测试结果
 
 ### LongMemEval（ICLR 2025）
 
-LongMemEval 用 500 道精选题测试**五项核心记忆能力**。我们用**真实 `longmemeval_s_cleaned.json` 数据集**验证了 Lynage 的检索层（DeepSeek V4 Flash，每题独立 DB + AI 归档，可选 **bge-small-en 语义嵌入**）。
+LongMemEval 用 500 道精选题测试**五项核心记忆能力**。我们用**真实** **`longmemeval_s_cleaned.json`** **数据集**验证了 Lynage 的检索层（DeepSeek V4 Flash，每题独立 DB + AI 归档，可选 **bge-small-en 语义嵌入**）。
 
-| 指标 | 结果 |
-|---|---|
-| **检索召回**（答案 chunk 进候选池） | **~100%**（带语义嵌入） |
-| **10,000 轮压力测试** | **100% 准确率 + 固定成本** |
+| 指标                      | 结果                  |
+| ----------------------- | ------------------- |
+| **检索召回**（答案 chunk 进候选池） | **100%（12 题样本 12/12，带语义嵌入）** |
+| **答案进入上下文**（recall@context） | **75%（12 题样本 9/12）** |
+| **10,000 轮压力测试**        | **100% 准确率 + 固定成本** |
 
-> **这证明了什么：** Lynage 的检索能从 ~40-60 个 session 的历史中找回答案 chunk —— 开启语义通道后，FTS + bge 嵌入几乎每次都能匹配到答案所在窗口。检索是检索层的职责；答案提取准确率由下游 LLM 决定，不是 Lynage 的职责。
+> **这证明了什么：** Lynage 的检索能从 \~40-60 个 session 的历史中找回答案 chunk（12 题样本 12/12，含 top-3 命中）。早期"~80% 召回"的真因是 **LLM rerank 的候选池塌缩 bug** —— 检索层（FTS + 语义嵌入）实际匹配率远高于此，但 rerank 证据错误时会把候选池塌缩成 1 个 chunk，答案被丢。修复 + 消息级语义索引后，专有名词题（playlist / yoga）与数字题（"$800"）全部恢复。**检索与上下文是 Lynage 的职责（100% + 75%）；答案提取准确率由下游 LLM 决定，不是 Lynage 的职责** —— 12 题样本中 flash 提取仅 2/12（答案在上下文时仍写错）。
 >
-> **为什么 LongMemEval 展示不了 Lynage 的树：** 每题 haystack 仅 ~115k tokens — **中等规模**检索，平面索引就够。Lynage 的树提供**对数深度搜索 + 固定上下文成本**，这在 **10,000+ 轮**才显威力（见下方压力测试）— 树把历史压缩到 ~3 层目录，LLM 上下文恒定 ~800 tokens，平面索引系统做不到。
+> **为什么 LongMemEval 展示不了 Lynage 的树：** 每题 haystack 仅 \~115k tokens — **中等规模**检索，平面索引就够。Lynage 的树提供**对数深度搜索 + 固定上下文成本**，这在 **10,000+ 轮**才显威力（见下方压力测试）— 树把历史压缩到 \~3 层目录，LLM 上下文恒定 \~800 tokens。
 >
 > **关于时序推理：** 树结构天然编码时间线（chunk 有 `timeRange`，消息有 `createdAt`）。时间戳传给 LLM 后，时序比较变成简单日期运算：*"TypeScript 先决定，在 2024-06-11。部署平台后来在 2024-06-12。"* 无需 LLM 推理。
 
-### 10,000 轮压力测试（DeepSeek V4 Flash）
+### 10,000 轮压力测试（DeepSeek V4 Flash，2,000 轮验证）
 
-10,000 轮对话中嵌入 50 个事实点，抽样 10 道失忆式提问。Flat FTS 是消息级关键词搜索基线（无树、无压缩）。
+50 个事实点嵌入 2,000 轮对话，抽样 10 道失忆式提问。**本仓可复现**：Lynage 用树摘要作答（`benchmarks/baseline/bench-10k.ts`）；Flat FTS 基线用 `search_messages` top-5（`bench-flat.ts`）。
 
-| 指标 | Lynage | Flat FTS（基线） |
-|---|---|---|
-| 准确率 | **100%** (10/10) | 100% (10/10) |
-| 幻觉率 | **0%** | 0% |
-| 搜索延迟 | **6ms** | 12ms |
-| 输入 Token（10 题） | **2,929** | 23,564 |
-| 总成本（10 题） | **¥0.006** | ¥0.028 |
-| 成本比 | **1×** | 4.7× |
+**fair 基准**（关键词原样出现，检索难度低）：
 
-> 两者准确率打平 — 合成数据关键词原样出现，检索难度低。Lynage 的优势在 **Token 效率**：树结构返回精准的分块摘要而非原始消息窗口，输入 Token 减少 **8 倍**。对话越长，差距越大。
+| 指标             | Lynage           | Flat FTS（基线） |
+| -------------- | ---------------- | ------------ |
+| 准确率            | **100%** (10/10) | 90% (9/10)    |
+| 幻觉率            | **0**            | 1            |
+| 搜索延迟           | ~6,200ms（含 LLM 重排） | ~1ms         |
+| 输入 Token（10 题） | 9,774（树摘要）      | 4,275（top-5 消息） |
+| 总成本（10 题）      | **¥0.014**       | ¥0.007       |
 
-### 失忆式提问基准（噪声鲁棒性）
+> 在关键词原样出现的简单题上，Flat FTS 也能应付 —— Lynage 赢准确率但付出更多 token 和延迟。**这个基准不是 Lynage 的差异化**。性能对比（token/延迟）强依赖上下文构造方式；曾引用的"6ms / 8× 少 token"来自摘要-only 快路径，不是这个端到端跑出的数字。
 
-测试「记不清细节」的提问方式。Flat FTS 使用 `search_messages` 默认 top-5 截断。
+**失忆式提问基准**（决策过程埋在噪声里："怎么定的？是不是先试了别的？最后选哪个？"）：
 
-| 指标 | Lynage | Flat FTS（基线） |
-|---|---|---|
-| 准确率 | **90%** (9/10) | 0% (0/10) |
-| 幻觉率 | 0% | 0% |
-| 回答质量 | 完整叙述决策过程 | "历史中完全没有提到" |
+| 指标   | Lynage         | Flat FTS（基线） |
+| ---- | -------------- | ------------ |
+| 准确率  | **90%** (9/10) | 0% (0/10)    |
+| 幻觉率  | 0             | 0            |
+| 回答质量 | 完整叙述决策过程       | "历史中完全没有提到"  |
 
-> Flat FTS 只返回 top-5 匹配 — 决策消息被噪声淹没（主题词出现在 98% 的对话中）。Lynage 返回所有 FTS 匹配加嵌入候选，决策分块始终在候选池中。这是**检索鲁棒性**优势，不是模型质量差异。
+> Flat FTS 得 **0%**，因为 `search_messages` 的 trigram FTS 解析不了含糊自然语言问句（"记不太清了…是不是…怎么定的"）—— 填充词破坏了匹配，返回 0 条。Lynage 的 `extractKeywords` 剥离填充词保留主题词，找到决策 chunk，完整叙述"试 A → 弃 → 选 C"过程。在 2,000 轮 / 4,000 消息的会话里，Lynage 9/10 找回决策，Flat 一无所获。这是**检索鲁棒性**优势，不是模型质量差异。
 
 ### Lynage 的差异化
 
 大多数记忆系统回答的问题是"怎么检索更准？" — 向量嵌入、图谱、更好的重排。Lynage 回答了一个它们都不回答的问题：**对话永不结束时，上下文预算怎么办？**
 
-| | 向量记忆（Mem0/Zep/MemGPT） | Lynage |
-|---|---|---|
-| 存储 | 平面索引增长；上下文线性膨胀 | **自生长世代树** |
-| 10,000 轮后 | 上下文窗口膨胀或截断 → 丢早期事实 | 树压缩到 ~3 层；**上下文恒定 ~800 tokens** |
-| 上下文成本 | 每轮都在涨 | **固定，无论对话多长** |
-| 信息保留 | 截断 = 永久丢失 | 消息不可变；**永不丢失** |
-| 搜索 | 线性扫描或平面向量搜索 | **对数深度树导航**（log₂₀ N） |
+| <br />    | 向量记忆（Mem0/Zep/MemGPT） | Lynage                            |
+| --------- | --------------------- | --------------------------------- |
+| 存储        | 平面索引增长；上下文线性膨胀        | **自生长世代树**                        |
+| 10,000 轮后 | 上下文窗口膨胀或截断 → 丢早期事实    | 树压缩到 \~3 层；**上下文恒定 \~800 tokens** |
+| 上下文成本     | 每轮都在涨                 | **固定，无论对话多长**                     |
+| 信息保留      | 截断 = 永久丢失             | 消息不可变；**永不丢失**                    |
+| 搜索        | 线性扫描或平面向量搜索           | **对数深度树导航**（log₂₀ N）              |
 
 **树就是差异化。** 每条消息不可变（追加写、永不删除）。AI 把窗口摘要成 chunk，chunk 压缩成目录，目录压缩成世代（G0→G1→G2）。搜索只下钻相关分支 — O(log₂₀ N)，不是 O(N)。LLM 永远不看到全部历史，只看到工作记忆 + 相关 chunk 摘要 + 验证后的原文片段。
 
 这就是为什么下面的 10,000 轮压力测试才是真正的对比：**Lynage 保持 100% 准确率，成本是平面的 1/4.7，Token 是 1/8** — 而平面系统必须在"花更多钱"和"遗忘"之间二选一。
 
----
+***
 
 ## 🛠️ 环境配置
 
@@ -126,7 +125,7 @@ export OPENAI_API_KEY="sk-..."
 export ANTHROPIC_API_KEY="sk-..."
 ```
 
----
+***
 
 ## 🚀 快速开始
 
@@ -167,9 +166,9 @@ const memory = createLynageMemory({
 });
 ```
 
-> `TrigramEmbedder` 是零依赖回退方案（~0.5ms，稀疏 trigram TF-IDF）。它能桥接轻微词汇差距，但**不是语义嵌入** —— 专有名词答案（"Summer Vibes"）需要 `TransformersEmbedder`（bge-small-en），它无需字符重叠即可语义匹配。
+> `TrigramEmbedder` 是零依赖回退方案（\~0.5ms，稀疏 trigram TF-IDF）。它能桥接轻微词汇差距，但**不是语义嵌入** —— 专有名词答案（"Summer Vibes"）需要 `TransformersEmbedder`（bge-small-en），它无需字符重叠即可语义匹配。
 
----
+***
 
 ## 🔍 搜索架构
 
@@ -197,20 +196,20 @@ Lynage 使用**分层检索** — 每层增加能力，逐层回退：
 
 **L0-L2 是零 LLM 成本的快速路径。** 大部分查询在 L1-L2 解决。L3 仅用于真正模糊、需要语义理解的查询。
 
----
+***
 
 ## 📜 API 参考
 
-| 方法 | 说明 |
-|---|---|
-| `memory.startTurn(sessionId, userId, input)` | 保存用户消息，返回编译上下文（工作记忆 + 历史） |
-| `turn.finish({ response, toolCalls, toolResults })` | 保存助手回复，自动触发归档 |
-| `memory.search({ query, sessionId })` | 分层搜索（L0→L3），返回排序候选 |
-| `memory.openSource(contextId)` | 打开分块读取原始消息 + 父目录上下文 |
-| `memory.commit(actions, sessionId, userId?)` | 增量写回工作记忆 / 用户记忆 |
-| `memory.getWorkingMemory(sessionId)` | 读取当前任务状态（任务/进度/未解决） |
-| `memory.getUserMemory(userId)` | 读取跨会话用户偏好 |
-| `memory.getDirectoryTree(sessionId)` | 查看生成树结构 |
+| 方法                                                  | 说明                        |
+| --------------------------------------------------- | ------------------------- |
+| `memory.startTurn(sessionId, userId, input)`        | 保存用户消息，返回编译上下文（工作记忆 + 历史） |
+| `turn.finish({ response, toolCalls, toolResults })` | 保存助手回复，自动触发归档             |
+| `memory.search({ query, sessionId })`               | 分层搜索（L0→L3），返回排序候选        |
+| `memory.openSource(contextId)`                      | 打开分块读取原始消息 + 父目录上下文       |
+| `memory.commit(actions, sessionId, userId?)`        | 增量写回工作记忆 / 用户记忆           |
+| `memory.getWorkingMemory(sessionId)`                | 读取当前任务状态（任务/进度/未解决）       |
+| `memory.getUserMemory(userId)`                      | 读取跨会话用户偏好                 |
+| `memory.getDirectoryTree(sessionId)`                | 查看生成树结构                   |
 
 ### MCP Server / Claude Code 集成
 
@@ -262,21 +261,21 @@ pnpm test          # 45/45 单元测试
 pnpm typecheck     # 7 包全部通过
 ```
 
----
+***
 
 ## 📁 仓库结构
 
-| 目录 | 内容 |
-|---|---|
-| `packages/core/` | 核心逻辑 — 记忆、搜索、归档、升代、验证、编译（13 模块） |
+| 目录                         | 内容                                     |
+| -------------------------- | -------------------------------------- |
+| `packages/core/`           | 核心逻辑 — 记忆、搜索、归档、升代、验证、编译（13 模块）        |
 | `packages/storage-sqlite/` | SQLite + FTS5 — 7 张表、WAL 模式、trigram 索引 |
-| `packages/adapter-ai-sdk/` | Vercel AI SDK 适配 — 5 个 Agent 工具 |
-| `packages/mcp-server/` | MCP Server — 6 个工具，跨框架 |
-| `apps/test-runner/` | E2E 测试管线（DeepSeek V4 Flash） |
-| `benchmarks/` | LongMemEval 集成、LoCoMo、失忆/10k 基准 |
-| `docs/` | 架构深入、概念指南 |
+| `packages/adapter-ai-sdk/` | Vercel AI SDK 适配 — 5 个 Agent 工具        |
+| `packages/mcp-server/`     | MCP Server — 6 个工具，跨框架                 |
+| `apps/test-runner/`        | E2E 测试管线（DeepSeek V4 Flash）            |
+| `benchmarks/`              | LongMemEval 集成、LoCoMo、失忆/10k 基准        |
+| `docs/`                    | 架构深入、概念指南                              |
 
----
+***
 
 ## 🔬 方法论与局限
 
@@ -294,7 +293,7 @@ LongMemEval 集成使用**标准化基准数据**（ICLR 2025，`longmemeval_s_c
 - **嵌入上下文窗口** — bge-small-en 上下文 512 token，chunk 的嵌入由摘要 + 消息头尾构成。答案埋在重度多主题窗口中间时排名可能偏低；缩小 chunk（降低 `retainTokens`）可缓解。
 - **Sharp 依赖** — Transformers.js（bge-small-en）在某些平台可能需要 `sharp`；不可用时回退 `TrigramEmbedder`（纯 TypeScript，仅词汇匹配）。
 
----
+***
 
 ## 📄 引用
 

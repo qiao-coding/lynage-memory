@@ -42,7 +42,7 @@ async function test(inst: any, retainTokens: number, label: string): Promise<voi
   const stats = await memory.getArchiveStats(SID);
 
   const sr = await memory.search({ query: inst.question, sessionId: SID });
-  const answerTerms = inst.answer.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3);
+  const answerTerms = inst.answer.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 2);
   let recalled = false, top3 = false;
   const open0 = await memory.openSource(sr.candidates[0]?.contextId);
   for (let i = 0; i < sr.candidates.length; i++) {

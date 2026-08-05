@@ -123,6 +123,13 @@ export function ensureTables(raw: Database.Database): void {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS message_embeddings (
+      message_id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      vector BLOB NOT NULL,
+      dim INTEGER NOT NULL
+    );
   `);
 
   // Indexes for hot query columns
@@ -133,6 +140,7 @@ export function ensureTables(raw: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_dir_children_dir ON directory_children(directory_id);
     CREATE INDEX IF NOT EXISTS idx_directories_parent ON directories(parent_id);
     CREATE INDEX IF NOT EXISTS idx_directories_session ON directories(session_id);
+    CREATE INDEX IF NOT EXISTS idx_msg_embeddings_session ON message_embeddings(session_id);
   `);
 
   // FTS5: full-text search on messages.content + chunk summaries

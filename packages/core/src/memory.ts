@@ -46,7 +46,7 @@ export class LynageMemory {
       retainTokens: this._config.retainTokens,
       directoryCapacity: this._config.directoryCapacity,
       fetchLimit: this._config.archiveFetchLimit,
-    });
+    }, options.embedder);
     this._turnManager = new TurnManager(this._store, this._archiveManager);
     this._historyRetriever = new HistoryRetriever(this._store, this._model, options.embedder);
     this._searchTaskManager = new SearchTaskManager(this._store);

@@ -36,6 +36,9 @@ export interface SearchCandidate {
   timeRange: { start: number; end: number };
   relevance: number;
   directoryContext?: DirectoryContext;
+  /** Message IDs with the highest embedding similarity to the query (message-
+   *  level semantic index). The answer message is usually here. */
+  topMessageIds?: string[];
 }
 export interface OpenSourceOptions {
   /** Max total tokens for returned messages (default: unlimited) */
@@ -72,11 +75,35 @@ export class HistoryRetriever {
   private model: LynageModel;
   private embedder: Embedder;
   private _embeddingCache: Map<string, Float32Array> = new Map();
+  /** Rerank result cache (`query|sessionId` → relevant chunk ids), LRU-capped.
+   * Repeated/near-identical queries skip the ~5s LLM rerank. Results are
+   * best-effort — new archiving may make them stale, but the cache is small. */
+  private _rerankCache: Map<string, string[]> = new Map();
+  private static readonly RERANK_CACHE_MAX = 64;
 
   constructor(store: LynageStore, model?: LynageModel, embedder?: Embedder) {
     this.store = store;
     this.model = model ?? ({} as LynageModel);
     this.embedder = embedder ?? new NoopEmbedder();
+  }
+
+  /** LRU get: touch on hit (move to most-recent). */
+  private _rerankCacheGet(key: string): string[] | undefined {
+    const v = this._rerankCache.get(key);
+    if (v !== undefined) {
+      this._rerankCache.delete(key);
+      this._rerankCache.set(key, v);
+    }
+    return v;
+  }
+
+  /** LRU set: evict oldest once over capacity. */
+  private _rerankCacheSet(key: string, value: string[]): void {
+    this._rerankCache.set(key, value);
+    if (this._rerankCache.size > HistoryRetriever.RERANK_CACHE_MAX) {
+      const oldest = this._rerankCache.keys().next().value;
+      if (oldest !== undefined) this._rerankCache.delete(oldest);
+    }
   }
 
   /**
@@ -215,38 +242,73 @@ export class HistoryRetriever {
     // "deployment platform" vs "deployment strategy"). Embedding cosine
     // similarity bridges this gap (~0.5ms local with TrigramEmbedder, zero LLM).
     const embedScores = new Map<string, number>();
+    const topMsgByChunk = new Map<string, string[]>(); // chunkId → top message ids
     if (!(this.embedder instanceof NoopEmbedder)) {
       try {
-        // Auto-fit TrigramEmbedder on current chunks (idempotent, ~1ms)
-        if (this.embedder instanceof TrigramEmbedder) {
-          (this.embedder as TrigramEmbedder).fit(allChunks.map(c =>
-            c.summary + " " + (c.keywords ?? []).join(" ")));
-        }
         const qEmb = await this.embedder.embed(query);
-        for (const chunk of allChunks) {
-          if (!this._embeddingCache.has(chunk.id)) {
-            // Embed BOTH the AI summary AND raw message evidence. Summary-only
-            // embedding is why proper-noun answers ("Summer Vibes") were
-            // missed: a multi-topic window's summary drops the answer topic.
-            // Messages are ground truth — the answer text appears verbatim.
-            // bge-small context = 512 tokens, so budget via head+tail: topics
-            // at either end of a long window still get represented.
-            const summary = chunk.summary + " " + (chunk.keywords ?? []).join(" ");
-            let msgText = "";
-            try {
-              const msgs = await this.store.getMessageRange(chunk.sourceFromId, chunk.sourceToId);
-              msgText = msgs.map(m => m.content).join(" ");
-            } catch { /* message fetch is non-fatal */ }
-            const EMBED_BUDGET = 2000;
-            const half = Math.floor(EMBED_BUDGET / 2);
-            const text = summary + " " + msgText;
-            const trimmed = text.length > EMBED_BUDGET
-              ? text.slice(0, half) + " " + text.slice(-half)
-              : text;
-            this._embeddingCache.set(chunk.id, await this.embedder.embed(trimmed));
+
+        // Preferred path: message-level semantic index (precomputed at archive
+        // time). Each message is embedded individually, so a proper-noun answer
+        // ("Summer Vibes") is NOT diluted by a 44-message multi-topic window —
+        // its own vector carries the signal. Query is embedded once; the rest
+        // is a DB read + cosine over stored vectors (no per-chunk embedding).
+        let usedMessageIndex = false;
+        try {
+          const msgEmbs = await this.store.getMessageEmbeddings(sessionId);
+          if (msgEmbs.length > 0) {
+            usedMessageIndex = true;
+            // Score every message, keep the top-20 by similarity.
+            const scored: { messageId: string; createdAt: number; sim: number }[] = [];
+            for (const msg of msgEmbs) {
+              const sim = this.embedder.similarity(qEmb, msg.vector);
+              if (sim > 0.15) scored.push({ messageId: msg.messageId, createdAt: msg.createdAt, sim });
+            }
+            scored.sort((a, b) => b.sim - a.sim);
+            const top = scored.slice(0, 20);
+            // Map top messages → chunks by time range; chunk embedScore = max cos.
+            for (const t of top) {
+              for (const chunk of allChunks) {
+                if (t.createdAt >= chunk.timeRangeStart && t.createdAt <= chunk.timeRangeEnd) {
+                  const ids = topMsgByChunk.get(chunk.id) ?? [];
+                  if (ids.length < 3) ids.push(t.messageId);
+                  topMsgByChunk.set(chunk.id, ids);
+                  if ((t.sim) > (embedScores.get(chunk.id) ?? 0)) {
+                    embedScores.set(chunk.id, t.sim);
+                    matchedChunkIds.add(chunk.id);
+                  }
+                  break;
+                }
+              }
+            }
           }
-          const sim = this.embedder.similarity(qEmb, this._embeddingCache.get(chunk.id)!);
-          if (sim > 0.15) { matchedChunkIds.add(chunk.id); embedScores.set(chunk.id, sim); }
+        } catch { /* message-index read is non-fatal → fall through */ }
+
+        // Fallback: chunk-level embedding (summary + keywords + message head/tail).
+        // Used when the message index is empty (legacy DB / nothing archived yet).
+        if (!usedMessageIndex) {
+          if (this.embedder instanceof TrigramEmbedder) {
+            (this.embedder as TrigramEmbedder).fit(allChunks.map(c =>
+              c.summary + " " + (c.keywords ?? []).join(" ")));
+          }
+          for (const chunk of allChunks) {
+            if (!this._embeddingCache.has(chunk.id)) {
+              const summary = chunk.summary + " " + (chunk.keywords ?? []).join(" ");
+              let msgText = "";
+              try {
+                const msgs = await this.store.getMessageRange(chunk.sourceFromId, chunk.sourceToId);
+                msgText = msgs.map(m => m.content).join(" ");
+              } catch { /* message fetch is non-fatal */ }
+              const EMBED_BUDGET = 2000;
+              const half = Math.floor(EMBED_BUDGET / 2);
+              const text = summary + " " + msgText;
+              const trimmed = text.length > EMBED_BUDGET
+                ? text.slice(0, half) + " " + text.slice(-half)
+                : text;
+              this._embeddingCache.set(chunk.id, await this.embedder.embed(trimmed));
+            }
+            const sim = this.embedder.similarity(qEmb, this._embeddingCache.get(chunk.id)!);
+            if (sim > 0.15) { matchedChunkIds.add(chunk.id); embedScores.set(chunk.id, sim); }
+          }
         }
       } catch { /* non-fatal */ }
     }
@@ -260,78 +322,96 @@ export class HistoryRetriever {
     // score would exclude the answer before the LLM ever sees it. Each
     // candidate carries its BEST MATCHING MESSAGE (ground truth — summaries
     // drift to English). Pool capped at 40 to bound the prompt.
+    //
+    // Confidence gate: the LLM call is ~5s. Most queries already have a clear
+    // leader in the FTS+embedding blended score, and the LLM adds nothing in
+    // those cases. Only pay the rerank cost when the top candidates are close
+    // (ambiguous) — that is exactly the case the rerank was built for.
     if (matchedChunkIds.size > 1 && this.model.rerankCandidates) {
       try {
         const allMatched = await this.store.getChunksByIds([...matchedChunkIds]);
-        // Pool must cover ALL matched chunks — at extreme noise a topic word can
-        // appear in 98% of chunks, and the decision chunk is one of them. A
-        // keyword score can't rank it higher, so a small cap excludes the answer.
-        const pool = allMatched.slice(0, 100);
-        // Send ONLY the matching message snippet (ground truth) — the drifted
-        // English summary + conclusions/goals bloat the prompt. This keeps the
-        // LLM's signal identical while cutting the rerank call size dramatically.
-        const rerankResult = await this.model.rerankCandidates({
-          query,
-          intent: "unknown",
-          candidates: pool.map((chunk) => {
-            const snippet = (bestMsgByChunk.get(chunk.id) ?? chunk.summary).slice(0, 120);
-            return {
-              contextId: chunk.id,
-              summary: snippet,
-              conclusions: [],
-              goals: [],
-              keywords: [],
-              messageSnippet: snippet,
-            };
-          }),
-        });
-        if (rerankResult.relevantIds.length > 0) {
-          matchedChunkIds = new Set(rerankResult.relevantIds);
-        }
-        // Safety net: LLM rerank can return empty or miss the best chunk
-        // (e.g. when query terms don't appear in chunk summaries). Fall back
-        // to computeRelevance ranking — fast, deterministic, keyword-based.
-        if (rerankResult.relevantIds.length <= 1 && allMatched.length > 1) {
-          // Find the top computeRelevance chunk as backstop
-          let bestId = allMatched[0]!.id;
-          let bestScore = -1;
-          for (const chunk of allMatched) {
-            const s = Math.max(
-              computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals),
-              msgRelevanceByChunk.get(chunk.id) ?? 0,
-            );
-            if (s > bestScore) { bestScore = s; bestId = chunk.id; }
+        const scored = allMatched.map(chunk => ({
+          id: chunk.id,
+          s: Math.max(
+            computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals),
+            msgRelevanceByChunk.get(chunk.id) ?? 0,
+            (embedScores.get(chunk.id) ?? 0) * 0.8,
+          ),
+        })).sort((a, b) => b.s - a.s);
+        const top1 = scored[0]?.s ?? 0;
+        const top2 = scored[1]?.s ?? 0;
+        const confident = top1 >= 0.4 && (top1 - top2) >= 0.2;
+
+        if (!confident) {
+          // Ambiguous → LLM rerank. Cache-first: repeated queries skip the ~5s
+          // call. Best-effort — a small LRU, staleness after new archiving is
+          // acceptable for an agent that re-asks similar questions.
+          const cacheKey = `${query}|${sessionId}`;
+          let relevantIds = this._rerankCacheGet(cacheKey);
+          if (relevantIds === undefined) {
+            // Pool must cover ALL matched chunks — at extreme noise a topic word
+            // can appear in 98% of chunks, and the decision chunk is one of them.
+            const pool = allMatched.slice(0, 100);
+            const rerankResult = await this.model.rerankCandidates({
+              query,
+              intent: "unknown",
+              candidates: pool.map((chunk) => {
+                const snippet = (bestMsgByChunk.get(chunk.id) ?? chunk.summary).slice(0, 120);
+                return {
+                  contextId: chunk.id,
+                  summary: snippet,
+                  conclusions: [],
+                  goals: [],
+                  keywords: [],
+                  messageSnippet: snippet,
+                };
+              }),
+            });
+            relevantIds = rerankResult.relevantIds;
+            this._rerankCacheSet(cacheKey, relevantIds);
           }
-          if (rerankResult.relevantIds.length === 0) {
-            // Rerank returned NOTHING — but that can mean the LLM's evidence
-            // (FTS message snippets) was wrong, not that history lacks the
-            // answer. Distinguish the two via the embedding channel's strongest
-            // match: a genuinely strong similarity means rerank likely missed a
-            // real chunk (keep the top-N by blended relevance instead of
-            // collapsing to one — collapsing buried proper-noun answers like
-            // "Summer Vibes"). A weak max similarity means nothing relevant
-            // exists — collapse to the single best keyword candidate to avoid
-            // flooding the LLM with noise (and hallucinating from it).
-            const maxEmb = embedScores.size > 0 ? Math.max(...embedScores.values()) : 0;
-            if (maxEmb >= this.embedder.confidenceThreshold) {
-              const scored = allMatched.map(chunk => ({
-                id: chunk.id,
-                s: Math.max(
-                  computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals),
-                  msgRelevanceByChunk.get(chunk.id) ?? 0,
-                  (embedScores.get(chunk.id) ?? 0) * 0.8,
-                ),
-              })).sort((a, b) => b.s - a.s);
-              matchedChunkIds = new Set(scored.slice(0, 6).map(x => x.id));
-            } else {
-              // No genuine semantic match — trust computeRelevance ranking
-              matchedChunkIds = new Set([bestId]);
+          if (relevantIds.length > 0) {
+            matchedChunkIds = new Set(relevantIds);
+          }
+          // Safety net: LLM rerank can return empty or miss the best chunk
+          // (e.g. when query terms don't appear in chunk summaries). Fall back
+          // to computeRelevance ranking — fast, deterministic, keyword-based.
+          if (relevantIds.length <= 1 && allMatched.length > 1) {
+            // Find the top computeRelevance chunk as backstop
+            let bestId = allMatched[0]!.id;
+            let bestScore = -1;
+            for (const chunk of allMatched) {
+              const s = Math.max(
+                computeRelevance(query, chunk.summary, chunk.keywords, chunk.conclusions, chunk.goals),
+                msgRelevanceByChunk.get(chunk.id) ?? 0,
+              );
+              if (s > bestScore) { bestScore = s; bestId = chunk.id; }
             }
-          } else if (bestScore > 0) {
-            // Rerank found 1 — add computeRelevance best as backup
-            matchedChunkIds.add(bestId);
+            if (relevantIds.length === 0) {
+              // Rerank returned NOTHING — but that can mean the LLM's evidence
+              // (FTS message snippets) was wrong, not that history lacks the
+              // answer. Distinguish the two via the embedding channel's strongest
+              // match: a genuinely strong similarity means rerank likely missed a
+              // real chunk (keep the top-N by blended relevance instead of
+              // collapsing to one — collapsing buried proper-noun answers like
+              // "Summer Vibes"). A weak max similarity means nothing relevant
+              // exists — collapse to the single best keyword candidate to avoid
+              // flooding the LLM with noise (and hallucinating from it).
+              const maxEmb = embedScores.size > 0 ? Math.max(...embedScores.values()) : 0;
+              if (maxEmb >= this.embedder.confidenceThreshold) {
+                matchedChunkIds = new Set(scored.slice(0, 6).map(x => x.id));
+              } else {
+                // No genuine semantic match — trust computeRelevance ranking
+                matchedChunkIds = new Set([bestId]);
+              }
+            } else if (bestScore > 0) {
+              // Rerank found 1 — add computeRelevance best as backup
+              matchedChunkIds.add(bestId);
+            }
           }
         }
+        // confident → matchedChunkIds unchanged. Step 3's blended ranking puts
+        // the clear leader first without spending 5s on an LLM call.
       } catch {
         // Keep original candidates on rerank failure
       }
@@ -368,6 +448,7 @@ export class HistoryRetriever {
           end: chunk.timeRangeEnd,
         },
         relevance,
+        topMessageIds: topMsgByChunk.get(chunk.id),
       });
     }
 
