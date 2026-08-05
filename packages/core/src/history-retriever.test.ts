@@ -384,4 +384,94 @@ describe("HistoryRetriever rerank confidence gate", () => {
 
     expect(counting.rerankCalls).toBe(1);
   });
+
+  it("honors a strict rerankTolerance (clear leader still reranks)", async () => {
+    // seedGateStore(false) has a clear leader (top1=0.5, margin=0.25). A strict
+    // tolerance (top1 >= 0.6) makes it NOT confident → rerank runs.
+    const store = new MockStoreForSearch();
+    seedGateStore(store, false);
+    const counting = new CountingRerankModel();
+    const retriever = new HistoryRetriever(store, counting as unknown as LynageModel, new NoopEmbedder());
+
+    await retriever.search({ query: "spotify playlist", sessionId: "s1", rerankTolerance: { top1: 0.6, margin: 0.4 } });
+
+    expect(counting.rerankCalls).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Search optimizations: binary-search message bucketing (1b) + context options
+// ---------------------------------------------------------------------------
+
+describe("HistoryRetriever optimizations", () => {
+  it("buckets FTS messages into chunks by time range (binary search, not full filter)", async () => {
+    const store = new MockStoreForSearch();
+    store.messages = [
+      { id: "m1", sessionId: "s1", role: "user", content: "common word alpha", createdAt: 1000 },
+      { id: "m2", sessionId: "s1", role: "assistant", content: "common word beta", createdAt: 2000 },
+      { id: "m3", sessionId: "s1", role: "user", content: "common word gamma", createdAt: 5000 },
+      { id: "m4", sessionId: "s1", role: "assistant", content: "common word delta", createdAt: 6000 },
+    ];
+    const mk = (id: string, from: string, to: string, s: number, e: number): ContextChunk => ({
+      id, sessionId: "s1", timeRangeStart: s, timeRangeEnd: e,
+      summary: `${id} summary`, progress: "", keywords: [], conclusions: [], goals: [],
+      sourceFromId: from, sourceToId: to, createdAt: e + 1000,
+    });
+    store.chunks.set("c1", mk("c1", "m1", "m2", 1000, 2000));
+    store.chunks.set("c2", mk("c2", "m3", "m4", 5000, 6000));
+    store.chunks.set("c3", mk("c3", "m9", "m10", 9000, 10000)); // empty range — no messages
+    const retriever = new HistoryRetriever(store);
+
+    const result = await retriever.search({ query: "common word", sessionId: "s1" });
+
+    const ids = result.candidates.map((c) => c.contextId).sort();
+    expect(ids).toEqual(["c1", "c2"]); // c3 has no messages in range → excluded
+  });
+
+  it("compileRetrievedContext caps candidates via maxCandidates", () => {
+    const retriever = new HistoryRetriever(new MockStoreForSearch());
+    const result: SearchResult = {
+      status: "found",
+      candidates: [0, 1, 2, 3].map((i) => ({
+        contextId: `c${i}`,
+        summary: `summary ${i}`,
+        progress: "",
+        keywords: [],
+        conclusions: [],
+        goals: [],
+        sourceRange: { from: "m", to: "m" },
+        timeRange: { start: 1000 + i, end: 2000 + i },
+        relevance: 0.9 - i * 0.1,
+      })),
+      searchedDirectories: 0,
+      totalChunksChecked: 0,
+    };
+
+    const text = retriever.compileRetrievedContext(result, undefined, 2);
+    expect(text.match(/## Result/g)?.length).toBe(2);
+  });
+
+  it("compileRetrievedContext truncates long summaries via maxSummaryChars", () => {
+    const retriever = new HistoryRetriever(new MockStoreForSearch());
+    const result: SearchResult = {
+      status: "found",
+      candidates: [{
+        contextId: "c0",
+        summary: "A".repeat(500),
+        progress: "",
+        keywords: [],
+        conclusions: [],
+        goals: [],
+        sourceRange: { from: "m", to: "m" },
+        timeRange: { start: 1000, end: 2000 },
+        relevance: 0.9,
+      }],
+      searchedDirectories: 0,
+      totalChunksChecked: 0,
+    };
+
+    const text = retriever.compileRetrievedContext(result, undefined, 1, 100);
+    expect(text.length).toBeLessThan(300); // 100-char summary + scaffolding, not 500
+    expect(text.includes("A".repeat(500))).toBe(false);
+  });
 });

@@ -18,7 +18,7 @@
 // ---------------------------------------------------------------------------
 
 import { createLynageMcpServer } from "./index.js";
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { LanguageModelV1 } from "ai";
@@ -209,7 +209,7 @@ function registerTools(server: McpServer, tools: ReturnType<typeof createLynageM
 
 async function runStdio(args: CliArgs) {
   const model = await createModel(args);
-  const aiSdkModel = new AiSdkModel(model);
+  const aiSdkModel = new LynageSdkModel(model);
 
   const { tools } = createLynageMcpServer({
     dbPath: args.db,
@@ -249,7 +249,7 @@ async function runServe(args: CliArgs) {
   }
 
   const model = await createModel(args);
-  const aiSdkModel = new AiSdkModel(model);
+  const aiSdkModel = new LynageSdkModel(model);
 
   const { tools } = createLynageMcpServer({
     dbPath: args.db,

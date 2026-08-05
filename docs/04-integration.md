@@ -8,7 +8,7 @@
 
 ```ts
 import { createDatabase, ensureTables, SqliteStore } from "@lynage/storage-sqlite";
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import { LynageMemory } from "@lynage/core";
 
 // 1. 创建存储
@@ -19,7 +19,7 @@ const store = new SqliteStore(db, raw);
 // 2. 创建记忆实例
 const memory = new LynageMemory({
   store,
-  model: new AiSdkModel(yourLLM),
+  model: new LynageSdkModel(yourLLM),
   config: { archiveThreshold: 16000, retainTokens: 6000, directoryCapacity: 20 },
 });
 

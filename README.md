@@ -137,11 +137,11 @@ const messages = await memory.openSource(result.candidates[0].contextId);
 **With AI-powered archiving (recommended for 500+ turns):**
 
 ```ts
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import { createOpenAI } from "@ai-sdk/openai";
 
 const model = createOpenAI({ apiKey: process.env.DEEPSEEK_API_KEY })("deepseek-v4-flash");
-const memory = createLynageMemory({ model: new AiSdkModel(model) });
+const memory = createLynageMemory({ model: new LynageSdkModel(model) });
 ```
 
 **With semantic embedding (recommended):**
@@ -150,7 +150,7 @@ const memory = createLynageMemory({ model: new AiSdkModel(model) });
 import { TransformersEmbedder } from "@lynage/core";
 
 const memory = createLynageMemory({
-  model: new AiSdkModel(model),
+  model: new LynageSdkModel(model),
   embedder: new TransformersEmbedder(),   // bge-small-en, 384-dim, local & free
 });
 ```

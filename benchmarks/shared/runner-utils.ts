@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createLynageMemory } from "@lynage/storage-sqlite";
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import type { LanguageModelV1 } from "ai";
 
 // ---- Types ----
@@ -61,7 +61,7 @@ export function createMemory(
 ) {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   return createLynageMemory({
-    model: new AiSdkModel(model, undefined, { useToolChoice: false }),
+    model: new LynageSdkModel(model, undefined, { useToolChoice: false }),
     dbPath,
     config: {
       archiveThreshold: config?.archiveThreshold ?? 600,

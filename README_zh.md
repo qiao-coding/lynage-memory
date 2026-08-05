@@ -13,15 +13,15 @@
 
 ## 🧠 概述
 
-Lynage 是**记忆基础设施层，不是推理层**。它保证 Agent 从记忆里需要的东西：原文永不丢失、可被自生长的树导航、按需高保真召回。**把召回的文本变成"角色记忆"——提炼认知（"掉进过池塘" → "他怕水"）并在场景中运用——是 Agent 的职责，不是 Lynage 的。**
+Lynage 是**记忆基础设施层，不是推理层**。它保证 Agent 从记忆里需要的东西：原文永不丢失、可被自生长的树导航、按需高保真召回。
 
 Lynage 对 Agent 记忆采取了根本不同的思路。不把旧对话压缩成摘要（信息永久丢失），也不把所有内容塞进上下文窗口（Token 成本线性增长），而是构建一棵**自生长的对话分块索引树**。
 
 ```
                      ┌──────────────────────────┐
-                     │     G2: 全局压缩目录        │
-                     │  "Project Alpha: 技术选型   │
-                     │   历经3次重大方向调整..."    │
+                     │     G2: 全局压缩目录       │
+                     │  "Project Alpha: 技术选型  │
+                     │   历经3次重大方向调整..."   │
                      └──────────┬───────────────┘
                                 │
               ┌─────────────────┼─────────────────┐
@@ -57,21 +57,19 @@ Lynage 对 Agent 记忆采取了根本不同的思路。不把旧对话压缩成
 | 指标   | Lynage         | Flat FTS（基线） |
 | ---- | -------------- | ------------ |
 | 准确率  | **90%** (9/10) | 0% (0/10)    |
-| 幻觉率  | 0             | 0            |
+| 幻觉率  | 0              | 0            |
 | 回答质量 | 完整叙述决策过程       | "历史中完全没有提到"  |
 
 > Flat FTS 得 **0%**，因为 `search_messages` 的 trigram FTS 解析不了含糊自然语言问句（"记不太清了…是不是…怎么定的"）—— 填充词破坏了匹配，返回 0 条。Lynage 的 `extractKeywords` 剥离填充词保留主题词，找到决策 chunk，完整叙述"试 A → 弃 → 选 C"过程。在 2,000 轮 / 4,000 消息的会话里，Lynage 9/10 找回决策，Flat 一无所获。这是**检索鲁棒性**优势，不是模型质量差异。
 
-### Galgame 剧情保真率（recall@prompt）
+### Galgame 剧情保真率（recall\@prompt）
 
 为叙事记忆设计（对齐 Protocol Zero）：具体剧情细节有多少能进入给生成器的上下文。合成 5 章中文 Galgame（205 轮），12 个细节埋在前 4 章（写第 5 章需回忆过去），`bge-small-zh` 嵌入（`benchmarks/galgame/recall-bench.ts`）。
 
-| 上下文 | recall@prompt |
-|---|---|
-| **仅摘要** | 83%（10/12）|
-| **摘要 + 原始消息** | **92%**（11/12）|
-
-按类型（完整上下文）：**台词 100% · 时间线 100% · 伏笔 100% · 角色记忆 67%**。
+| 上下文           | recall\@prompt |
+| ------------- | -------------- |
+| **仅摘要**       | 83%（10/12）     |
+| **摘要 + 原始消息** | **92%**（11/12） |
 
 > **摘要 + 原文高于仅摘要，说明剧情细节活在原始对白里，摘要是导航不是存储** —— Lynage 的 `openSource` 恢复原文是保真的关键。
 
@@ -81,7 +79,7 @@ Lynage 对 Agent 记忆采取了根本不同的思路。不把旧对话压缩成
 
 | <br />    | 向量记忆（Mem0/Zep/MemGPT） | Lynage                            |
 | --------- | --------------------- | --------------------------------- |
-| 存储        | 平面索引增长；上下文线性膨胀        | **自生长世代树**                        |
+| 存储        | 平面索引增长；上下文线性膨胀        | **自生长分块索引树**                      |
 | 10,000 轮后 | 上下文窗口膨胀或截断 → 丢早期事实    | 树压缩到 \~3 层；**上下文恒定 \~800 tokens** |
 | 上下文成本     | 每轮都在涨                 | **固定，无论对话多长**                     |
 | 信息保留      | 截断 = 永久丢失             | 消息不可变；**永不丢失**                    |
@@ -135,11 +133,11 @@ const messages = await memory.openSource(result.candidates[0].contextId);
 **接入 AI 归档（推荐 500 轮以上对话）：**
 
 ```ts
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import { createOpenAI } from "@ai-sdk/openai";
 
 const model = createOpenAI({ apiKey: process.env.DEEPSEEK_API_KEY })("deepseek-v4-flash");
-const memory = createLynageMemory({ model: new AiSdkModel(model) });
+const memory = createLynageMemory({ model: new LynageSdkModel(model) });
 ```
 
 **接入语义嵌入（推荐）：**
@@ -148,7 +146,7 @@ const memory = createLynageMemory({ model: new AiSdkModel(model) });
 import { TransformersEmbedder } from "@lynage/core";
 
 const memory = createLynageMemory({
-  model: new AiSdkModel(model),
+  model: new LynageSdkModel(model),
   embedder: new TransformersEmbedder(),   // bge-small-en，384 维，本地免费
 });
 ```
@@ -257,7 +255,7 @@ pnpm typecheck     # 7 包全部通过
 | `packages/adapter-ai-sdk/` | Vercel AI SDK 适配 — 5 个 Agent 工具        |
 | `packages/mcp-server/`     | MCP Server — 6 个工具，跨框架                 |
 | `apps/test-runner/`        | E2E 测试管线（DeepSeek V4 Flash）            |
-| `benchmarks/`              | Galgame 剧情保真率、LoCoMo、失忆/10k 基准        |
+| `benchmarks/`              | Galgame 剧情保真率、LoCoMo、失忆/10k 基准         |
 | `docs/`                    | 架构深入、概念指南                              |
 
 ***

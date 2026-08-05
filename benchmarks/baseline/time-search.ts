@@ -1,7 +1,7 @@
 // Time each search() component to find the 5s culprit
 import { createOpenAI } from "@ai-sdk/openai";
 import { createLynageMemory } from "@lynage/storage-sqlite";
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import fs from "node:fs"; import path from "node:path";
 const ep=path.resolve(process.cwd(),"..","..",".env");
 if(fs.existsSync(ep))for(const l of fs.readFileSync(ep,"utf-8").split("\n")){const t=l.trim();if(!t||t.startsWith("#"))continue;const i=t.indexOf("=");if(i<0)continue;if(!process.env[t.slice(0,i).trim()])process.env[t.slice(0,i).trim()]=t.slice(i+1).trim();}
@@ -9,7 +9,7 @@ const ds=createOpenAI({apiKey:process.env.DEEPSEEK_API_KEY!,baseURL:(process.env
 
 async function main(){
   const db=path.resolve(process.cwd(),"data","time-search.db");try{fs.unlinkSync(db);}catch{}
-  const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:2000,retainTokens:800,directoryCapacity:10}});
+  const mem=createLynageMemory({model:new LynageSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:2000,retainTokens:800,directoryCapacity:10}});
   // Populate 2000 turns (fast messages, low threshold)
   const pk=<T,>(a:T[])=>a[Math.floor(Math.random()*a.length)]!;
   const factTurns=new Set([400,800,1200,1600]);

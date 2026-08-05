@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AiSdkModel — LynageModel implementation using Vercel AI SDK
+// LynageSdkModel — LynageModel implementation using Vercel AI SDK
 // Uses generateObject + Zod schemas for structured model output.
 // ---------------------------------------------------------------------------
 
@@ -29,7 +29,7 @@ import {
   RerankResultSchema,
 } from "@lynage/core";
 
-export interface AiSdkModelOptions {
+export interface LynageSdkModelOptions {
   /**
    * Use generateObject (tool_choice structured output) for model calls.
    * Set false for thinking/reasoning models (e.g. deepseek-v4-flash) where
@@ -46,13 +46,13 @@ export interface AiSdkModelOptions {
   temperature?: number;
 }
 
-export class AiSdkModel implements LynageModel {
+export class LynageSdkModel implements LynageModel {
   private model: LanguageModelV1;
   private systemPrompt: string;
   private useToolChoice: boolean;
   private temperature: number;
 
-  constructor(model: LanguageModelV1, systemPrompt?: string, options?: AiSdkModelOptions) {
+  constructor(model: LanguageModelV1, systemPrompt?: string, options?: LynageSdkModelOptions) {
     this.model = model;
     this.systemPrompt = systemPrompt ?? "";
     this.useToolChoice = options?.useToolChoice ?? true;

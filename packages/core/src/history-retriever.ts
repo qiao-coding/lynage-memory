@@ -21,6 +21,13 @@ export interface SearchParams {
   query: string;
   sessionId: string;
   limit?: number;
+  /**
+   * Confidence gate for the LLM rerank: when the top candidate's blended score
+   * and its margin over #2 exceed these, the rerank (~5s LLM call) is skipped.
+   * Lower = more queries skip the rerank (faster, slightly less precise);
+   * higher = fewer skip (more precise, slower). Default { top1: 0.4, margin: 0.2 }.
+   */
+  rerankTolerance?: { top1: number; margin: number };
 }
 
 export interface DirectoryContext {
@@ -178,12 +185,20 @@ export class HistoryRetriever {
     const bestMsgByChunk = new Map<string, string>();
     const ftsMessages = await this.store.searchMessages(ftsQuery, sessionId);
     if (ftsMessages.length > 0) {
+      // Sort once by createdAt; each chunk's range is then a binary-search slice
+      // instead of a full filter over all messages (O(chunks × M) → O(chunks × log M)).
+      // This was the dominant search cost on noise-heavy sessions (a topic word
+      // matching thousands of messages × hundreds of chunks).
+      const sorted = [...ftsMessages].sort((a, b) => a.createdAt - b.createdAt);
+      const times = sorted.map((m) => m.createdAt);
+      const covered = new Set<string>();
       for (const chunk of allChunks) {
-        const hits = ftsMessages.filter(
-          (m) => m.createdAt >= chunk.timeRangeStart && m.createdAt <= chunk.timeRangeEnd,
-        );
-        if (hits.length > 0) {
+        const lo = lowerBound(times, chunk.timeRangeStart);
+        const hi = upperBound(times, chunk.timeRangeEnd);
+        if (lo < hi) {
+          const hits = sorted.slice(lo, hi);
           matchedChunkIds.add(chunk.id);
+          for (const m of hits) covered.add(m.id);
           let best = 0;
           let bestText = "";
           for (const m of hits) {
@@ -197,9 +212,7 @@ export class HistoryRetriever {
         }
       }
 
-      const unarchived = ftsMessages.filter(
-        (m) => !allChunks.some((c) => m.createdAt >= c.timeRangeStart && m.createdAt <= c.timeRangeEnd),
-      );
+      const unarchived = ftsMessages.filter((m) => !covered.has(m.id));
       for (const msg of unarchived.slice(-10)) {
         const relevance = computeRelevance(query, msg.content, []);
         if (relevance > 0) {
@@ -340,7 +353,8 @@ export class HistoryRetriever {
         })).sort((a, b) => b.s - a.s);
         const top1 = scored[0]?.s ?? 0;
         const top2 = scored[1]?.s ?? 0;
-        const confident = top1 >= 0.4 && (top1 - top2) >= 0.2;
+        const tol = params.rerankTolerance ?? { top1: 0.4, margin: 0.2 };
+        const confident = top1 >= tol.top1 && (top1 - top2) >= tol.margin;
 
         if (!confident) {
           // Ambiguous → LLM rerank. Cache-first: repeated queries skip the ~5s
@@ -686,7 +700,14 @@ export class HistoryRetriever {
   /**
    * Compile retrieved context into a model-readable text block.
    */
-  compileRetrievedContext(result: SearchResult, maxTokens?: number): string {
+  compileRetrievedContext(
+    result: SearchResult,
+    maxTokens?: number,
+    /** Cap the number of candidates included (token control). Default: all. */
+    maxCandidates?: number,
+    /** Truncate each summary to this many chars (token control). Default: full. */
+    maxSummaryChars?: number,
+  ): string {
     if (result.candidates.length === 0) return "[No relevant history found.]";
 
     const lines: string[] = [
@@ -695,13 +716,17 @@ export class HistoryRetriever {
     ];
     let totalEst = estimateTokenCount(lines.join("\n"));
 
-    for (let i = 0; i < result.candidates.length; i++) {
+    const cap = maxCandidates ?? result.candidates.length;
+    for (let i = 0; i < result.candidates.length && i < cap; i++) {
       const c = result.candidates[i]!;
       const date = new Date(c.timeRange.start).toLocaleDateString();
+      const summary = maxSummaryChars && c.summary.length > maxSummaryChars
+        ? c.summary.slice(0, maxSummaryChars) + "…"
+        : c.summary;
       const block = [
         `## Result ${i + 1} [${date}] (relevance: ${Math.round(c.relevance * 100)}%)`,
         `Context ID: ${c.contextId}`,
-        `Summary: ${c.summary}`,
+        `Summary: ${summary}`,
       ];
       // Directory context: adds signal but costs tokens — include only if budget allows
       if (c.directoryContext) {
@@ -723,6 +748,28 @@ export class HistoryRetriever {
 }
 
 // ---- Helpers ----
+
+/** First index where times[i] >= target (lower bound). */
+function lowerBound(times: number[], target: number): number {
+  let lo = 0, hi = times.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (times[mid]! < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** First index where times[i] > target (upper bound). */
+function upperBound(times: number[], target: number): number {
+  let lo = 0, hi = times.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (times[mid]! <= target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
 
 // English stop words — shared between extractKeywords and computeRelevance.
 // Without this, "What is the user's favorite language?" → ["What","is","the"]

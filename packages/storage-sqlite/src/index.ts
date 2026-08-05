@@ -35,8 +35,8 @@ export interface CreateLynageMemoryOptions {
  *
  * Add a model to enable AI-powered archiving and search:
  * ```ts
- * import { AiSdkModel } from "@lynage/ai-sdk";
- * const memory = createLynageMemory({ model: new AiSdkModel(yourLLM) });
+ * import { LynageSdkModel } from "@lynage/ai-sdk";
+ * const memory = createLynageMemory({ model: new LynageSdkModel(yourLLM) });
  * ```
  */
 export function createLynageMemory(options: CreateLynageMemoryOptions = {}): LynageMemory {

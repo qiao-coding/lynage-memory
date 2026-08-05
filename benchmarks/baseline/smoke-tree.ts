@@ -5,7 +5,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { createLynageMemory } from "@lynage/storage-sqlite";
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import fs from "node:fs"; import path from "node:path";
 const ep=path.resolve(process.cwd(),"..","..",".env");
 if(fs.existsSync(ep))for(const l of fs.readFileSync(ep,"utf-8").split("\n")){const t=l.trim();if(!t||t.startsWith("#"))continue;const i=t.indexOf("=");if(i<0)continue;if(!process.env[t.slice(0,i).trim()])process.env[t.slice(0,i).trim()]=t.slice(i+1).trim();}
@@ -25,7 +25,7 @@ async function main(){
   const db=path.resolve(process.cwd(),"data","smoke-tree.db");try{fs.unlinkSync(db);}catch{}
   // Low threshold so short smoke messages (~22 tok/msg) still trigger
   // archiving within the 200-message getRecent window.
-  const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:2000,retainTokens:800,directoryCapacity:10}});
+  const mem=createLynageMemory({model:new LynageSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:2000,retainTokens:800,directoryCapacity:10}});
   const st0=performance.now();
   for(let i=0;i<turns.length;i++){const t=turns[i]!;const tn=await mem.startTurn("s1","u1",t.u);await tn.finish({response:t.a});}
   await mem.waitForArchiving("s1");

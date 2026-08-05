@@ -1,7 +1,7 @@
 // Measure archive throughput with new config (fetchLimit 2000, retainTokens 8000)
 import { createOpenAI } from "@ai-sdk/openai";
 import { createLynageMemory } from "@lynage/storage-sqlite";
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import fs from "node:fs"; import path from "node:path";
 const ep=path.resolve(process.cwd(),"..","..",".env");
 if(fs.existsSync(ep))for(const l of fs.readFileSync(ep,"utf-8").split("\n")){const t=l.trim();if(!t||t.startsWith("#"))continue;const i=t.indexOf("=");if(i<0)continue;if(!process.env[t.slice(0,i).trim()])process.env[t.slice(0,i).trim()]=t.slice(i+1).trim();}
@@ -16,7 +16,7 @@ for(let i=0;i<T;i++){const c=pk(["Button","Table","Modal","Form","Input"]);const
 
 async function main(){
   const db=path.resolve(process.cwd(),"data","throughput.db");try{fs.unlinkSync(db);}catch{}
-  const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:16000,retainTokens:8000,directoryCapacity:10,archiveFetchLimit:2000}});
+  const mem=createLynageMemory({model:new LynageSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:16000,retainTokens:8000,directoryCapacity:10,archiveFetchLimit:2000}});
   const t0=performance.now();
   for(const t of turns){const tn=await mem.startTurn("s1","u1",t.u);await tn.finish({response:t.a});}
   const t1=performance.now();

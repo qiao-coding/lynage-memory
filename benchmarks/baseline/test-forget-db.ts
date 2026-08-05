@@ -3,7 +3,7 @@
 // whether each decision chunk is found + ranked.
 import { createOpenAI } from "@ai-sdk/openai";
 import { createLynageMemory } from "@lynage/storage-sqlite";
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import path from "node:path";
 const ep=path.resolve(process.cwd(),"..","..",".env");
 import fs from "node:fs";
@@ -30,7 +30,7 @@ const questions=FACTS.map(([n,mainstream,tried,chosen])=>({
 
 async function main(){
   const dbPath=path.resolve(process.cwd(),"data","forget.db");
-  const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:dbPath,config:{archiveThreshold:8000,retainTokens:2000,directoryCapacity:10}});
+  const mem=createLynageMemory({model:new LynageSdkModel(m, undefined, { useToolChoice: false }),dbPath:dbPath,config:{archiveThreshold:8000,retainTokens:2000,directoryCapacity:10}});
   const st=await mem.getArchiveStats("s1");
   console.log(`DB: ${st.chunkCount} chunks, ${st.messageCount} messages`);
 

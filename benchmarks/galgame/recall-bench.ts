@@ -17,7 +17,7 @@
 //   pnpm tsx recall-bench.ts
 import { createOpenAI } from "@ai-sdk/openai";
 import { createLynageMemory } from "@lynage/storage-sqlite";
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import { TransformersEmbedder } from "@lynage/core";
 import fs from "node:fs";
 import path from "node:path";
@@ -76,8 +76,10 @@ function generateChapters(): { turns: Turn[]; details: Detail[] } {
     "第一章：在旧车站初次相遇", "第二章：一起逛过的小镇", "第三章：说好一起去看海",
     "第四章：雨夜里的往事", "第五章：最后一班列车",
   ];
-  // Filler dialogue pools (non-plot chatter, ~100 chars/line, so ~200 rounds
-  // ≈ 25k tokens → archiving fires into several chunks across the 5 chapters)
+  // Filler dialogue pools — DIVERSE per-round content (different scenes, moods,
+  // topics) like a real Galgame. The earlier benchmark reused the same 1-2 lines
+  // for all 200 rounds, collapsing bge's cosine discrimination to ~0.01 and
+  // unfairly burying the "角色记忆" details. Diversity restores realistic signal.
   const fillerU = [
     "今天天气不错，云很淡。沿着这条旧路一直走，远处能看见车站的轮廓，我们以前好像也走过这里。",
     "你饿了吗？前面转角有家小店，门口挂着褪色的布帘，老板是个总是笑眯眯的老人家。",
@@ -89,6 +91,8 @@ function generateChapters(): { turns: Turn[]; details: Detail[] } {
     "天快黑了，街灯一盏一盏亮起来，昏黄的光落在石板路上，影子被拉得很长很长。",
     "你平时一个人的时候都喜欢做什么？除了等我，总该有自己的生活吧。",
     "要一起喝点什么吗？前面有家茶馆，靠窗的位子能看到整条街，老板还会讲当地的故事。",
+    "我好像忘带伞了，要是突然下雨就麻烦了，这附近连个躲雨的地方都没有。",
+    "今天路过旧书店，看到一本讲旅行的书，忽然想起你以前说很想去海边看看。",
   ];
   const fillerA = [
     "嗯，天气确实很好。云淡风轻的日子总是让人想起很多以前的事，包括那些以为已经忘了的细节。",
@@ -101,6 +105,8 @@ function generateChapters(): { turns: Turn[]; details: Detail[] } {
     "天黑前回去也来得及。不过难得出来一趟，多待一会儿也不错，我其实挺喜欢这样的傍晚。",
     "平时也就是看看书，整理一下房间，偶尔写点东西。生活很简单，没什么特别的。",
     "好，我请客。那家的茶不错，上次路过闻着特别香，正好一起尝尝看。",
+    "我带了把折叠伞，放在随身包里，要是下雨的话，我可以撑伞送你回去。",
+    "旅行书啊……等以后有机会，我们可以真的去看看海。我也很久没出过远门了。",
   ];
 
   const turns: Turn[] = [];
@@ -142,7 +148,7 @@ async function main() {
   try { fs.unlinkSync(dbPath); } catch {}
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const memory = createLynageMemory({
-    model: new AiSdkModel(model, undefined, { useToolChoice: false }),
+    model: new LynageSdkModel(model, undefined, { useToolChoice: false }),
     dbPath,
     // Lower retainTokens so the ~25k-token story archives into several chunks
     // (one per chapter-ish), exercising cross-chunk retrieval.

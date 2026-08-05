@@ -1,7 +1,7 @@
 // Diagnose forget Q4(状态管理)/Q6(Monorepo) failures: what does FTS find?
 import { createOpenAI } from "@ai-sdk/openai";
 import { createLynageMemory } from "@lynage/storage-sqlite";
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import fs from "node:fs"; import path from "node:path";
 const ep=path.resolve(process.cwd(),"..","..",".env");
 if(fs.existsSync(ep))for(const l of fs.readFileSync(ep,"utf-8").split("\n")){const t=l.trim();if(!t||t.startsWith("#"))continue;const i=t.indexOf("=");if(i<0)continue;if(!process.env[t.slice(0,i).trim()])process.env[t.slice(0,i).trim()]=t.slice(i+1).trim();}
@@ -16,7 +16,7 @@ for(let i=0;i<60;i++){const c=["Button","Table","Modal","Form","Input"][i%5]!;co
 
 async function main(){
   const db=path.resolve(process.cwd(),"data","debug-forget.db");try{fs.unlinkSync(db);}catch{}
-  const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:2000,retainTokens:800,directoryCapacity:10}});
+  const mem=createLynageMemory({model:new LynageSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:2000,retainTokens:800,directoryCapacity:10}});
   for(const t of turns){const tn=await mem.startTurn("s1","u1",t.u);await tn.finish({response:t.a});}
   await mem.waitForArchiving("s1"); await mem.waitForArchiving("s1");
   const chunks=await mem.store.listChunks("s1");

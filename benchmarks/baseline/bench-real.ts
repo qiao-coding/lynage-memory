@@ -12,7 +12,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { createLynageMemory } from "@lynage/storage-sqlite";
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import { generateSimulation } from "./simulate.js";
 import { computeReport, printReport, type GroupResult, type TurnMetrics } from "./metrics.js";
 import fs from "node:fs";
@@ -119,7 +119,7 @@ async function runLynage(
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
   const memory = createLynageMemory({
-    model: new AiSdkModel(model),
+    model: new LynageSdkModel(model),
     dbPath: DB_PATH,
     config: { archiveThreshold: ARCHIVE_THRESHOLD, retainTokens: 250, directoryCapacity: 5 },
   });

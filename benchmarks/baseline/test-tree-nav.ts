@@ -1,7 +1,7 @@
 // Validate FTS tree navigation: searchDirectories + drillDown speed + correctness
 import { createOpenAI } from "@ai-sdk/openai";
 import { createLynageMemory } from "@lynage/storage-sqlite";
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import path from "node:path";
 import fs from "node:fs";
 const ep=path.resolve(process.cwd(),"..","..",".env");
@@ -10,7 +10,7 @@ const ds=createOpenAI({apiKey:process.env.DEEPSEEK_API_KEY!,baseURL:(process.env
 
 async function main(){
   const dbPath=path.resolve(process.cwd(),"data","forget.db");
-  const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:dbPath,config:{archiveThreshold:16000,retainTokens:8000,directoryCapacity:10}});
+  const mem=createLynageMemory({model:new LynageSdkModel(m, undefined, { useToolChoice: false }),dbPath:dbPath,config:{archiveThreshold:16000,retainTokens:8000,directoryCapacity:10}});
   const store=mem.store;
 
   // 1. searchDirectories correctness

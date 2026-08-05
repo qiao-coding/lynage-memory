@@ -1,7 +1,7 @@
 // Forget benchmark: process-based contrarian questions, 10k turns
 // Questions mimic a user who forgot details: "what did we discuss, what did we abandon, what did we pick?"
 import { createOpenAI } from "@ai-sdk/openai"; import { generateText } from "ai";
-import { createLynageMemory } from "@lynage/storage-sqlite"; import { AiSdkModel } from "@lynage/ai-sdk";
+import { createLynageMemory } from "@lynage/storage-sqlite"; import { LynageSdkModel } from "@lynage/ai-sdk";
 import fs from "node:fs"; import path from "node:path";
 const ep=path.resolve(process.cwd(),"..","..",".env");
 if(fs.existsSync(ep))for(const l of fs.readFileSync(ep,"utf-8").split("\n")){const t=l.trim();if(!t||t.startsWith("#"))continue;const i=t.indexOf("=");if(i<0)continue;if(!process.env[t.slice(0,i).trim()])process.env[t.slice(0,i).trim()]=t.slice(i+1).trim();}
@@ -72,7 +72,7 @@ console.log(`Lynage forget 10k: ${T} turns, ${questions.length} questions`);
 const db=path.resolve(process.cwd(),"data","forget.db");try{fs.unlinkSync(db);}catch{}
 // Lower retainTokens + directoryCapacity so ~10k turns grow G0→G1→G2
 // in minutes instead of hours (with throttled directory summaries).
-const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:16000,retainTokens:8000,directoryCapacity:10}});
+const mem=createLynageMemory({model:new LynageSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:16000,retainTokens:8000,directoryCapacity:10}});
 
 console.log("Storing (async archiving)...");
 const st0=performance.now();

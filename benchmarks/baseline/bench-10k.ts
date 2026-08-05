@@ -1,6 +1,6 @@
 // 10k-turn fair benchmark: Lynage, symmetric with Hermes (no artificial truncation)
 import { createOpenAI } from "@ai-sdk/openai"; import { generateText } from "ai";
-import { createLynageMemory } from "@lynage/storage-sqlite"; import { AiSdkModel } from "@lynage/ai-sdk";
+import { createLynageMemory } from "@lynage/storage-sqlite"; import { LynageSdkModel } from "@lynage/ai-sdk";
 import fs from "node:fs"; import path from "node:path";
 const ep=path.resolve(process.cwd(),"..","..",".env");
 if(fs.existsSync(ep))for(const l of fs.readFileSync(ep,"utf-8").split("\n")){const t=l.trim();if(!t||t.startsWith("#"))continue;const i=t.indexOf("=");if(i<0)continue;if(!process.env[t.slice(0,i).trim()])process.env[t.slice(0,i).trim()]=t.slice(i+1).trim();}
@@ -38,7 +38,7 @@ console.log(`Lynage 10k fair: ${T} turns, ${questions.length} questions (no trun
 const db=path.resolve(process.cwd(),"data","10k-fair.db");try{fs.unlinkSync(db);}catch{}
 // Lower retainTokens + directoryCapacity so ~10k turns grow G0→G1→G2
 // in minutes instead of hours (with throttled directory summaries).
-const mem=createLynageMemory({model:new AiSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:16000,retainTokens:8000,directoryCapacity:10}});
+const mem=createLynageMemory({model:new LynageSdkModel(m, undefined, { useToolChoice: false }),dbPath:db,config:{archiveThreshold:16000,retainTokens:8000,directoryCapacity:10}});
 
 console.log("Storing (async archiving)...");
 const st0=performance.now();
@@ -81,7 +81,9 @@ for(let i=0;i<questions.length;i++){const q=questions[i]!;
   // message windows). This is the differentiator — fixed-size context regardless
   // of conversation length. The Hermes symmetry rationale no longer applies
   // (README dropped the Hermes comparison as a different arena).
-  const cx=mem.compileRetrievedContext(sr);
+  // Lightweight context: top-2 candidates + truncated summaries — token control
+  // (vs the old 5-candidate full-summary block, ~9.8k input tokens for 10 Q).
+  const cx=mem.compileRetrievedContext(sr, undefined, 2, 200);
   const l0=performance.now();const an=await ask(`根据对话历史回答，用中文。\n---\n${cx}\n---\n${q.q}`);tl+=performance.now()-l0;
   ti+=an.input;to+=an.output;
   const j=await judge(q.q,an.text,q.fact,q.wrong);if(j.ok)acc++;if(j.hal)hal++;

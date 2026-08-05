@@ -11,7 +11,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, type CoreTool } from "ai";
 import { createDatabase, ensureTables, SqliteStore } from "@lynage/storage-sqlite";
-import { AiSdkModel } from "@lynage/ai-sdk";
+import { LynageSdkModel } from "@lynage/ai-sdk";
 import { LynageMemory } from "@lynage/core";
 import path from "node:path";
 import fs from "node:fs";
@@ -47,7 +47,7 @@ ensureTables(raw);
 const store = new SqliteStore(db, raw);
 const deepseek = createOpenAI({ apiKey: API_KEY, baseURL: BASE_URL });
 const model = deepseek(MODEL_NAME);
-const aiModel = new AiSdkModel(model);
+const aiModel = new LynageSdkModel(model);
 const memory = new LynageMemory({
   store,
   model: aiModel,
