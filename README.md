@@ -76,17 +76,16 @@ Lynage takes a fundamentally different approach to agent memory. Instead of comp
 
 ### Galgame Recall@Prompt (Narrative Fidelity)
 
-Designed for narrative memory (Protocol Zero): how often specific plot details survive into the context handed to a story generator. Synthetic 5-chapter Chinese Galgame (205 turns), 12 details across 4 types, `bge-small-zh` embedding, `benchmarks/galgame/recall-bench.ts`.
+Designed for narrative memory (Protocol Zero): how often specific plot details survive into the context handed to a story generator. Synthetic 5-chapter Chinese Galgame (205 turns), 12 details planted in chapters 1-4 (writing ch.5 requires recalling the past), `bge-small-zh` embedding, `benchmarks/galgame/recall-bench.ts`.
 
 | Context | Recall@prompt |
 |---|---|
-| **Compression baseline** (last 40 msgs in context) | **0%** — early-chapter detail fully lost |
 | **Summaries only** | 83% (10/12) |
 | **Summaries + raw messages** | **92%** (11/12) |
 
 By type (full context): **台词 100% · 时间线 100% · 伏笔 100% · 角色记忆 67%**.
 
-> **Why the compression baseline is 0%:** details live in chapters 1-4 — already outside any recent-window context. That is exactly the scene Lynage exists for: the generator writing chapter 5 must *recall the past*. Context compression wins only inside the recent window, where nothing needs remembering. Embedding model matters too: `bge-small-en` read Chinese poorly (58%, noise sim ~0.74); `bge-small-zh` reached 92%. Use a Chinese/multilingual embedder for Chinese narratives.
+> **Summaries + source beats summaries alone because narrative detail lives in the raw dialogue; summaries are navigation, not storage** — `openSource` restoring the original lines is what makes fidelity work. Embedding model matters too: `bge-small-en` read Chinese poorly (58%, noise sim ~0.74); `bge-small-zh` reached 92%. Use a Chinese/multilingual embedder for Chinese narratives. The remaining 角色记忆 67% reflects run-to-run retrieval variance (67-100%).
 
 ### Why Lynage Is Different
 
