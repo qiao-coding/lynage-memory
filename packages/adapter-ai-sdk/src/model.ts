@@ -95,6 +95,8 @@ export class AiSdkModel implements LynageModel {
 
     const prompt = `Summarize the following conversation segment into a STRUCTURED memory entry.
 
+IMPORTANT: Write ALL output fields (summary, progress, keywords, conclusions, goals) in the SAME LANGUAGE as the conversation messages. If the conversation is Chinese, write Chinese — never translate or switch to English. Preserve original terms in keywords (don't translate them).
+
 Extract:
 - summary: What was discussed (overview)
 - progress: How work advanced
@@ -149,7 +151,9 @@ Produce:
 - progress: How the project advanced
 - mainConclusions: Key decisions reached
 - importantChanges: Changes in direction or abandoned approaches
-- goals: Aggregated goals across the child windows`;
+- goals: Aggregated goals across the child windows
+
+IMPORTANT: Write ALL output fields in the SAME LANGUAGE as the child summaries below. If they are Chinese, write Chinese — never translate or switch to English.`;
 
     try {
       return await this.structured(

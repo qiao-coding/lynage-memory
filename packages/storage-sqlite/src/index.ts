@@ -19,6 +19,9 @@ export interface CreateLynageMemoryOptions {
   config?: Partial<LynageConfig>;
   /** Semantic search embedder (Phase 2). Defaults to FTS-only. */
   embedder?: Embedder;
+  /** Embed messages at archive time (message-level index). Default true;
+   *  disable for bulk ingestion / benchmarks to avoid CPU embedding cost. */
+  enableMessageEmbedding?: boolean;
 }
 
 /**
@@ -48,5 +51,6 @@ export function createLynageMemory(options: CreateLynageMemoryOptions = {}): Lyn
     model: options.model ?? ({} as LynageModel),
     config: options.config,
     embedder: options.embedder,
+    enableMessageEmbedding: options.enableMessageEmbedding,
   });
 }

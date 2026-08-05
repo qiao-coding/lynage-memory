@@ -46,22 +46,6 @@ Lynage 对 Agent 记忆采取了根本不同的思路。不把旧对话压缩成
 
 ## 📊 基准测试结果
 
-### LongMemEval（ICLR 2025）
-
-LongMemEval 用 500 道精选题测试**五项核心记忆能力**。我们用**真实** **`longmemeval_s_cleaned.json`** **数据集**验证了 Lynage 的检索层（DeepSeek V4 Flash，每题独立 DB + AI 归档，可选 **bge-small-en 语义嵌入**）。
-
-| 指标                      | 结果                  |
-| ----------------------- | ------------------- |
-| **检索召回**（答案 chunk 进候选池） | **100%（12 题样本 12/12，带语义嵌入）** |
-| **答案进入上下文**（recall@context） | **75%（12 题样本 9/12）** |
-| **10,000 轮压力测试**        | **100% 准确率 + 固定成本** |
-
-> **这证明了什么：** Lynage 的检索能从 \~40-60 个 session 的历史中找回答案 chunk（12 题样本 12/12，含 top-3 命中）。早期"~80% 召回"的真因是 **LLM rerank 的候选池塌缩 bug** —— 检索层（FTS + 语义嵌入）实际匹配率远高于此，但 rerank 证据错误时会把候选池塌缩成 1 个 chunk，答案被丢。修复 + 消息级语义索引后，专有名词题（playlist / yoga）与数字题（"$800"）全部恢复。**检索与上下文是 Lynage 的职责（100% + 75%）；答案提取准确率由下游 LLM 决定，不是 Lynage 的职责** —— 12 题样本中 flash 提取仅 2/12（答案在上下文时仍写错）。
->
-> **为什么 LongMemEval 展示不了 Lynage 的树：** 每题 haystack 仅 \~115k tokens — **中等规模**检索，平面索引就够。Lynage 的树提供**对数深度搜索 + 固定上下文成本**，这在 **10,000+ 轮**才显威力（见下方压力测试）— 树把历史压缩到 \~3 层目录，LLM 上下文恒定 \~800 tokens。
->
-> **关于时序推理：** 树结构天然编码时间线（chunk 有 `timeRange`，消息有 `createdAt`）。时间戳传给 LLM 后，时序比较变成简单日期运算：*"TypeScript 先决定，在 2024-06-11。部署平台后来在 2024-06-12。"* 无需 LLM 推理。
-
 ### 10,000 轮压力测试（DeepSeek V4 Flash，2,000 轮验证）
 
 50 个事实点嵌入 2,000 轮对话，抽样 10 道失忆式提问。**本仓可复现**：Lynage 用树摘要作答（`benchmarks/baseline/bench-10k.ts`）；Flat FTS 基线用 `search_messages` top-5（`bench-flat.ts`）。
@@ -87,6 +71,19 @@ LongMemEval 用 500 道精选题测试**五项核心记忆能力**。我们用**
 | 回答质量 | 完整叙述决策过程       | "历史中完全没有提到"  |
 
 > Flat FTS 得 **0%**，因为 `search_messages` 的 trigram FTS 解析不了含糊自然语言问句（"记不太清了…是不是…怎么定的"）—— 填充词破坏了匹配，返回 0 条。Lynage 的 `extractKeywords` 剥离填充词保留主题词，找到决策 chunk，完整叙述"试 A → 弃 → 选 C"过程。在 2,000 轮 / 4,000 消息的会话里，Lynage 9/10 找回决策，Flat 一无所获。这是**检索鲁棒性**优势，不是模型质量差异。
+
+### Galgame 剧情保真率（recall@prompt）
+
+为叙事记忆设计（对齐 Protocol Zero）：具体剧情细节有多少能进入给生成器的上下文。合成 5 章中文 Galgame（205 轮），12 个细节 / 4 类，`bge-small-zh` 嵌入，跑 3 次（`benchmarks/galgame/recall-bench.ts`）。
+
+| 上下文 | recall@prompt |
+|---|---|
+| **仅摘要** | 67–83%（不稳定 — AI 摘要有时丢细节）|
+| **摘要 + 原始消息** | **83% 稳定**（10/12）|
+
+按类型（完整上下文）：**台词 100% · 时间线 100% · 伏笔 67% · 角色记忆 67%**。
+
+> **摘要 vs 摘要+原文的差距就是设计核心。** 剧情细节活在原始对白里；摘要是导航，不是存储。Lynage 的 `openSource` 恢复原文，所以完整上下文的保真率稳定在 83%，纯摘要则波动。嵌入模型很关键：`bge-small-en` 只有 58%（英文模型读中文差，噪声 ~0.74），`bge-small-zh` 达 83%。中文叙事必须用中文/多语言嵌入。
 
 ### Lynage 的差异化
 
@@ -241,17 +238,15 @@ Claude Code 配置（`.claude/settings.json`）：
 ### 跑基准测试
 
 ```bash
-cd benchmarks/longmemeval
+# 10k 压力测试 + forget 基准（Lynage vs Flat FTS 基线）
+cd benchmarks/baseline
+TURNS=2000 pnpm tsx bench-10k.ts          # Lynage fair
+TURNS=2000 pnpm tsx bench-flat.ts         # Flat FTS 基线
+TURNS=2000 pnpm tsx bench-forget.ts       # Lynage forget（噪声鲁棒）
+TURNS=2000 pnpm tsx bench-flat-forget.ts  # Flat FTS forget 基线
 
-# 1. 生成 mock 数据（或下载真实数据集）
-pnpm tsx ../data/generate-mock.ts
-
-# 2. 预摄入对话到 Lynage
-pnpm tsx setup.ts
-
-# 3. 用 Promptfoo 评测
-pnpm tsx eval.ts                 # 5 题 (mock)
-QUESTIONS=500 pnpm tsx eval.ts   # 500 题 (真实数据集)
+# Galgame 剧情保真率（recall@prompt）
+cd benchmarks/galgame && pnpm tsx recall-bench.ts
 ```
 
 ### 跑测试
@@ -272,7 +267,7 @@ pnpm typecheck     # 7 包全部通过
 | `packages/adapter-ai-sdk/` | Vercel AI SDK 适配 — 5 个 Agent 工具        |
 | `packages/mcp-server/`     | MCP Server — 6 个工具，跨框架                 |
 | `apps/test-runner/`        | E2E 测试管线（DeepSeek V4 Flash）            |
-| `benchmarks/`              | LongMemEval 集成、LoCoMo、失忆/10k 基准        |
+| `benchmarks/`              | Galgame 剧情保真率、LoCoMo、失忆/10k 基准        |
 | `docs/`                    | 架构深入、概念指南                              |
 
 ***
@@ -283,7 +278,7 @@ pnpm typecheck     # 7 包全部通过
 
 失忆式提问和 10,000 轮基准使用**嵌入事实点的合成对话**。事实关键词直接出现在消息中，降低了所有系统的检索难度。这些测试验证受控条件下 Lynage 的 Token 效率和检索鲁棒性（对比 Flat FTS 基线）。
 
-LongMemEval 集成使用**标准化基准数据**（ICLR 2025，`longmemeval_s_cleaned.json`），提供外部验证的结果。评测 pipeline 完整可用（`benchmarks/longmemeval/eval-500.ts`），真实数据结果见上方基准部分。
+Galgame 剧情保真率评测（`benchmarks/galgame/recall-bench.ts`）测量**剧情细节保真**：具体台词、时间线事件、伏笔、角色记忆有多少比例能进入给生成器的上下文 —— 这是叙事记忆真正该测的指标（对齐 Protocol Zero 设计）。
 
 ### 已知局限
 

@@ -54,28 +54,44 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
 // Transformers.js implementation (HuggingFace transformers v3)
 //
 // Uses @huggingface/transformers for local inference. Model is downloaded once,
-// cached on disk. bge-small-en-v1.5: 384-dim, ~30MB, supports English + code.
+// cached on disk. Defaults to bge-small-en (384-dim, ~30MB, English); pass
+// "Xenova/bge-small-zh-v1.5" (512-dim, Chinese) or "Xenova/bge-m3" (1024-dim,
+// multilingual, large) via the model option. Dimensions follow the model.
 // ---------------------------------------------------------------------------
 
 const DEFAULT_MODEL = "Xenova/bge-small-en-v1.5";
 
+// Embedding dimension per supported model (bge-small-zh is 512, not 384).
+const DIM_BY_MODEL: Record<string, number> = {
+  "Xenova/bge-small-en-v1.5": 384,
+  "Xenova/bge-small-zh-v1.5": 512,
+  "BAAI/bge-m3": 1024,
+  "Xenova/bge-m3": 1024,
+};
+
 export interface TransformersEmbedderOptions {
   model?: string;
+  /** Quantization dtype for large models (e.g. "q8" for bge-m3 on CPU). */
+  dtype?: "fp32" | "q8" | "int8";
 }
 
 export class TransformersEmbedder implements Embedder {
   readonly name = "transformers.js";
-  readonly dimensions = 384;
-  // bge-small cosine: unrelated pairs ~0.28-0.39, related ~0.5-0.9. 0.42
-  // separates "rerank missed a real match" from "genuinely nothing relevant".
+  readonly dimensions: number;
+  // bge cosine: unrelated pairs ~0.28-0.39, related ~0.5-0.9. 0.42 separates
+  // "rerank missed a real match" from "genuinely nothing relevant". Chinese
+  // bge-small-zh scores run a bit higher (0.55 related) — 0.42 stays safe.
   readonly confidenceThreshold = 0.42;
 
   private _model: string;
+  private _dtype: "fp32" | "q8" | "int8";
   private _pipeline: any = null;
   private _ready: Promise<void> | null = null;
 
   constructor(options: TransformersEmbedderOptions = {}) {
     this._model = options.model || DEFAULT_MODEL;
+    this._dtype = options.dtype ?? "fp32";
+    this.dimensions = DIM_BY_MODEL[this._model] ?? 384;
   }
 
   /**
@@ -90,7 +106,7 @@ export class TransformersEmbedder implements Embedder {
       try {
         const { pipeline } = await import("@huggingface/transformers");
         this._pipeline = await pipeline("feature-extraction", this._model, {
-          dtype: "fp32",
+          dtype: this._dtype,
           device: "cpu",
         });
       } catch (err: any) {

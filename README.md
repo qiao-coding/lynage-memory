@@ -48,22 +48,6 @@ Lynage takes a fundamentally different approach to agent memory. Instead of comp
 
 ## 📊 Benchmark Results
 
-### LongMemEval (ICLR 2025)
-
-LongMemEval tests **five core memory abilities** across 500 curated questions. We validated Lynage's retrieval layer against the **real `longmemeval_s_cleaned.json` dataset** (DeepSeek V4 Flash, per-question fresh DB with AI archiving, optional **bge-small-en semantic embedding**).
-
-| Metric | Result |
-|---|---|
-| **Retrieval recall** (answer chunk in candidates) | **100%** (12/12 on a 12-question sample, with semantic embedding) |
-| **Answer reaches context** (recall@context) | **75%** (9/12 on the same sample) |
-| **10,000-turn stress test** | **100% accuracy, fixed cost** |
-
-> **What this proves:** Lynage's retrieval recovers the **answer chunk from ~40-60 session haystacks** (12/12 on a 12-question sample, including top-3 hits). The earlier "~80% recall" figure was an artifact of an **LLM-rerank pool-collapse bug** — the retrieval layer (FTS + semantic embedding) matches far more than that, but when the rerank's evidence was wrong it collapsed the candidate pool to one chunk, dropping the answer. After the fix + message-level semantic index, proper-noun questions (playlist / yoga) and a numeric question ("$800") all recover. **Retrieval and context are Lynage's job (100% + 75%); answer extraction accuracy is bounded by the downstream LLM, not by Lynage** — on the 12-question sample flash extracted only 2/12 even with the answer in context.
->
-> **Why LongMemEval doesn't showcase Lynage's tree:** Each question's haystack is only ~115k tokens — *medium-scale* retrieval where a flat index suffices. Lynage's tree delivers **logarithmic-depth search and fixed context cost**, which is what matters at **10,000+ turns** (see the stress test below). At that scale the tree compresses history into ~3 directory levels while keeping LLM context at ~800 tokens — a property no flat-index system has.
->
-> **On temporal reasoning:** The tree structure encodes the timeline natively (every chunk has `timeRange`, every message has `createdAt`). Once timestamps are passed to the LLM, temporal comparison becomes simple date math: *"TypeScript was decided first, on 2024-06-11. The deployment platform was brought up later, on 2024-06-12."* No LLM reasoning needed.
-
 ### 10,000-Turn Stress Test (DeepSeek V4 Flash, validated at 2,000 turns)
 
 50 facts embedded across 2,000 turns. 10 forget-style questions ("What did we decide about X? Didn't we try something else first?"). Reproduced in-repo: Lynage answers from tree summaries (`benchmarks/baseline/bench-10k.ts`); Flat FTS is a message-level keyword baseline via `search_messages` top-5 (`bench-flat.ts`).
@@ -89,6 +73,19 @@ LongMemEval tests **five core memory abilities** across 500 curated questions. W
 | Answer Quality | Full process narrative | "Not mentioned in history" |
 
 > Flat FTS gets **0%** because `search_messages` trigram FTS cannot parse vague natural-language questions ("我记不太清了…是不是…怎么定的") — filler words break the match, returning zero results. Lynage's `extractKeywords` strips fillers and keeps the topic term, finds the decision chunk, and narrates the full process (tried A → abandoned → chose C). This is the **retrieval robustness** advantage — on a 2,000-turn session with 4,000 messages, Lynage recovers the decision 9/10 while flat recovers nothing.
+
+### Galgame Recall@Prompt (Narrative Fidelity)
+
+Designed for narrative memory (Protocol Zero): how often specific plot details survive into the context handed to a story generator. Synthetic 5-chapter Chinese Galgame (205 turns), 12 details across 4 types, `bge-small-zh` embedding. 3 runs, `benchmarks/galgame/recall-bench.ts`.
+
+| Context | Recall@prompt |
+|---|---|
+| **Summaries only** | 67–83% (unstable — AI summaries sometimes drop detail) |
+| **Summaries + raw messages** | **83% stable** (10/12) |
+
+By type (full context): **台词 100% · 时间线 100% · 伏笔 67% · 角色记忆 67%**.
+
+> **The gap between summaries-only and summaries+source is the whole point.** Narrative detail lives in the raw dialogue; summaries are navigation, not storage. Lynage's `openSource` restores the original lines, which is why the full-context fidelity is stable at 83% while summaries alone fluctuate. Embedding model matters: `bge-small-en` scored 58% (an English model reads Chinese poorly — noise scores ~0.74), `bge-small-zh` scores 83%. Use a Chinese/multilingual embedder for Chinese narratives.
 
 ### Why Lynage Is Different
 
@@ -216,17 +213,15 @@ User Query
 ### Running Benchmarks
 
 ```bash
-cd benchmarks/longmemeval
+# 10k fair + forget stress tests (Lynage vs Flat FTS baseline)
+cd benchmarks/baseline
+TURNS=2000 pnpm tsx bench-10k.ts          # Lynage fair
+TURNS=2000 pnpm tsx bench-flat.ts         # Flat FTS baseline
+TURNS=2000 pnpm tsx bench-forget.ts       # Lynage forget (noise resilience)
+TURNS=2000 pnpm tsx bench-flat-forget.ts  # Flat FTS forget baseline
 
-# 1. Generate mock data (or download real dataset)
-pnpm tsx ../data/generate-mock.ts
-
-# 2. Pre-ingest conversations into Lynage
-pnpm tsx setup.ts
-
-# 3. Run evaluation with Promptfoo
-pnpm tsx eval.ts                 # 5 questions (mock)
-QUESTIONS=500 pnpm tsx eval.ts   # 500 questions (real dataset)
+# Galgame recall@prompt (plot-detail fidelity)
+cd benchmarks/galgame && pnpm tsx recall-bench.ts
 ```
 
 ### Running Tests
@@ -247,7 +242,7 @@ pnpm typecheck     # All 7 packages
 | `packages/adapter-ai-sdk/` | Vercel AI SDK adapter — 5 agent tools |
 | `packages/mcp-server/` | MCP Server — 6 tools, cross-framework |
 | `apps/test-runner/` | E2E test pipeline (DeepSeek V4 Flash) |
-| `benchmarks/` | LongMemEval integration, LoCoMo, forget/10k benchmarks |
+| `benchmarks/` | Galgame recall@prompt, LoCoMo, forget/10k benchmarks |
 | `docs/` | Architecture deep-dives, concept guides |
 
 ---
@@ -258,7 +253,7 @@ pnpm typecheck     # All 7 packages
 
 The forget-style and 10,000-turn benchmarks use **synthetic conversations with embedded fact points**. Fact keywords appear verbatim in messages, which lowers retrieval difficulty for ALL systems. These tests validate Lynage's token efficiency and retrieval robustness under controlled conditions (Lynage vs a flat FTS baseline).
 
-The LongMemEval integration uses **standardized benchmark data** (ICLR 2025, `longmemeval_s_cleaned.json`) for externally-validated results. The eval pipeline is fully runnable (`benchmarks/longmemeval/eval-500.ts`); real-data results are in the benchmark section above.
+The Galgame recall@prompt benchmark (`benchmarks/galgame/recall-bench.ts`) measures **plot-detail fidelity**: how often specific dialogue lines, timeline events, foreshadows, and character memories survive into the context given to a generator — the metric that matters for narrative memory (see Protocol Zero design).
 
 ### Known Limitations
 
