@@ -7,7 +7,7 @@
 
 **可靠的 AI Agent 对话记忆基础设施 — 消息不可变、树导航、高保真召回，固定 LLM 成本。**
 
-[English](README.md)
+[English](README.md) · [快速开始](#-quick-start) · [基准测试](#-benchmark-results) · [架构](docs/02-how-it-works.md) · [API](#-api-reference)
 
 ***
 

@@ -33,6 +33,26 @@ await turn.finish({ response: reply });
 
 ---
 
+## 可选：接入语义嵌入
+
+Lynage 默认用 FTS5 关键词搜索（快但只匹配字面）。接入语义嵌入后，搜索能理解"部署平台" ≈ "部署策略"这类同义关系，无需精确字符重叠：
+
+```ts
+import { TransformersEmbedder } from "@lynage/core";
+
+const memory = new LynageMemory({
+  store,
+  model: new LynageSdkModel(yourLLM),
+  embedder: new TransformersEmbedder(),  // bge-small-en, 384-dim, 本地免费
+});
+```
+
+两种嵌入器可选：
+- **TransformersEmbedder** — bge-small-en/zh 语义嵌入，~30ms/查询，需下载模型 (~50MB)
+- **TrigramEmbedder** — 纯 TypeScript 稀疏 trigram TF-IDF，零依赖，~0.5ms/查询，仅桥接轻微词汇差异
+
+---
+
 ## Hermes 模式下怎么嵌入
 
 Lynage 的设计参考了 Hermes 的 Memory Provider 接口。嵌入 Hermes 的路径：
@@ -188,6 +208,7 @@ Token 趋势:
 |------|------|------|
 | Token 估算粗糙 | 用 char/4 估算，不是精确 tokenizer | 后续换 tiktoken |
 | 标签质量依赖 AI | 窗口标签是 AI 生成的，可能不够准确 | 原文验证弥补了这个缺陷 |
-| 搜索是关键词匹配 | 不是语义搜索 | 后续可加 embedding 作为辅助 |
-| 并行搜索是进程内 | 不是分布式 | 单机够用，分布式后续做 |
+| 嵌入上下文窗口 512 token | bge-small-en 嵌入窗口有限，多主题窗口中部内容排名偏低 | 减小 retainTokens 可缓解 |
+| AI 摘要语言漂移 | 中文对话可能产生英文摘要，降低中文 FTS 召回率 | 消息级 FTS 兜底 |
+| 无时间推理 | 跨主题对比"哪个先决定"尚不支持 | Phase 3 规划中 |
 | 没有 UI | 只能通过 CLI/API 使用 | 调试用 CLI 已够，正式 UI 后续 |

@@ -7,7 +7,7 @@
 
 **Reliable conversation memory for AI agents — immutable storage, tree navigation, high-fidelity recall at fixed LLM cost.**
 
-[Quick Start](#-quick-start) · [Benchmarks](#-benchmark-results) · [Architecture](docs/02-how-it-works.md) · [API](#-api-reference)
+[中文](README_zh.md) · [Quick Start](#-quick-start) · [Benchmarks](#-benchmark-results) · [Architecture](docs/02-how-it-works.md) · [API](#-api-reference)
 
 ---
 
