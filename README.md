@@ -21,22 +21,22 @@ Lynage takes a fundamentally different approach to agent memory. Instead of comp
 
 ```
                      ┌──────────────────────────┐
-                     │     G2: 全局压缩目录        │
-                     │  "Project Alpha: 技术选型   │
-                     │   历经3次重大方向调整..."    │
+                     │     G2: Global Summary     │
+                     │  "Project Alpha: tech stack│
+                     │   went through 3 pivots..."│
                      └──────────┬───────────────┘
                                 │
               ┌─────────────────┼─────────────────┐
               │                 │                 │
      ┌────────▼────────┐ ┌──────▼──────┐ ┌───────▼───────┐
-     │  G1: 部署决策     │ │ G1: 数据库   │ │ G1: 认证方案   │
-     │  Docker→Vercel  │ │ PG→Mongo    │ │ NextAuth→     │
-     │  原因: 无运维     │ │ 非结构化文档  │ │ Supabase      │
+     │ G1: Deploy       │ │ G1: Database │ │ G1: Auth       │
+     │  Docker→Vercel   │ │ PG→Mongo     │ │ NextAuth→      │
+     │  Reason: no ops   │ │ Unstructured │ │ Supabase       │
      └────────┬────────┘ └──────┬──────┘ └───────┬───────┘
               │                 │                 │
      ┌────────▼────────┐        ...               ...
-     │ G0 chunks (12个) │
-     │ 含原始消息指针    │
+     │ G0 chunks (12)   │
+     │ w/ source ptrs   │
      └─────────────────┘
 ```
 
@@ -62,7 +62,7 @@ Lynage takes a fundamentally different approach to agent memory. Instead of comp
 | Hallucination | 0 | 0 |
 | Answer Quality | Full process narrative | "Not mentioned in history" |
 
-> Flat FTS gets **0%** because `search_messages` trigram FTS cannot parse vague natural-language questions ("我记不太清了…是不是…怎么定的") — filler words break the match, returning zero results. Lynage's `extractKeywords` strips fillers and keeps the topic term, finds the decision chunk, and narrates the full process (tried A → abandoned → chose C). This is the **retrieval robustness** advantage — on a 2,000-turn session with 4,000 messages, Lynage recovers the decision 9/10 while flat recovers nothing.
+> Flat FTS gets **0%** because `search_messages` trigram FTS cannot parse vague natural-language questions (e.g. "I can't quite remember... was it... how was it decided?") — filler words break the match, returning zero results. Lynage's `extractKeywords` strips fillers and keeps the topic term, finds the decision chunk, and narrates the full process (tried A → abandoned → chose C). This is the **retrieval robustness** advantage — on a 2,000-turn session with 4,000 messages, Lynage recovers the decision 9/10 while flat recovers nothing.
 
 ### Galgame Recall@Prompt (Narrative Fidelity)
 
@@ -73,7 +73,7 @@ Designed for narrative memory (Protocol Zero): how often specific plot details s
 | **Summaries only** | 83% (10/12) |
 | **Summaries + raw messages** | **92%** (11/12) |
 
-By type (full context): **台词 100% · 时间线 100% · 伏笔 100% · 角色记忆 67%**.
+By type (full context): **Dialogue 100% · Timeline 100% · Foreshadowing 100% · Character memory 67%**.
 
 > **Summaries + source beats summaries alone because narrative detail lives in the raw dialogue; summaries are navigation, not storage** — `openSource` restoring the original lines is what makes fidelity work.
 
@@ -167,11 +167,11 @@ Lynage uses **layered retrieval** — each layer adds capability, only falling b
 User Query
   │
   ├─ L0: Directory FTS (~1ms, 0 LLM)
-  │   "最近在做什么?" → directory summary match
+  │   "What are we working on?" → directory summary match
   │   Hit rate ~30%, cost ¥0
   │
   ├─ L1: Chunk FTS + Message FTS (~6ms, 0 LLM)
-  │   "TypeScript方案" → trigram keyword match
+  │   "TypeScript approach" → trigram keyword match
   │   Hit rate ~50%, cost ¥0
   │
   ├─ L2: Embedding Search (~0.5ms trigram / ~30ms bge, 0 LLM)
@@ -266,6 +266,6 @@ The Galgame recall@prompt benchmark (`benchmarks/galgame/recall-bench.ts`) measu
 }
 ```
 
-## 许可证
+## License
 
 MIT
