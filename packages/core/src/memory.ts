@@ -7,6 +7,8 @@ import type { LynageStore, WorkingMemoryInput, UserMemoryInput } from "./store.j
 import type { LynageModel } from "./model.js";
 import type { LynageConfig, MessageInput } from "./types.js";
 import { DEFAULT_CONFIG } from "./types.js";
+import type { Embedder } from "./embedder.js";
+import { NoopEmbedder } from "./embedder.js";
 import { TurnManager, type TurnHandle } from "./turn.js";
 import { ArchiveManager, type ArchiveResult } from "./archive-manager.js";
 import { HistoryRetriever, type SearchParams, type SearchResult, type DirectoryTreeNode, type SearchCandidate, type OpenSourceResult } from "./history-retriever.js";
@@ -20,6 +22,12 @@ export interface LynageMemoryOptions {
   store: LynageStore;
   model: LynageModel;
   config?: Partial<LynageConfig>;
+  /** Semantic search embedder. Defaults to NoopEmbedder (FTS-only). */
+  embedder?: Embedder;
+  /** Embed messages at archive time for the message-level semantic index.
+   *  Expensive on CPU for large sessions (bge over every message). Set false
+   *  for bulk ingestion / benchmarks to keep the cheaper chunk-level fallback. */
+  enableMessageEmbedding?: boolean;
 }
 
 export class LynageMemory {
@@ -42,9 +50,9 @@ export class LynageMemory {
       retainTokens: this._config.retainTokens,
       directoryCapacity: this._config.directoryCapacity,
       fetchLimit: this._config.archiveFetchLimit,
-    });
+    }, options.embedder, options.enableMessageEmbedding);
     this._turnManager = new TurnManager(this._store, this._archiveManager);
-    this._historyRetriever = new HistoryRetriever(this._store, this._model);
+    this._historyRetriever = new HistoryRetriever(this._store, this._model, options.embedder);
     this._searchTaskManager = new SearchTaskManager(this._store);
     this._sourceVerifier = new SourceVerifier(this._store);
     this._parallelSearch = new ParallelSearchCoordinator(this._store, this._historyRetriever);
@@ -208,6 +216,11 @@ export class LynageMemory {
 
   async search(options: SearchParams): Promise<SearchResult> {
     return this._historyRetriever.search(options);
+  }
+
+  /** Swap the semantic embedder at runtime (benchmarking). Clears embedding cache. */
+  setEmbedder(embedder: Embedder): void {
+    this._historyRetriever.setEmbedder(embedder);
   }
 
   /** Verify search results against original messages */

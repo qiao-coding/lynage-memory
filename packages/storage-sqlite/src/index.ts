@@ -1,6 +1,6 @@
 // @lynage/storage-sqlite — SQLite + Drizzle ORM implementation
 
-import { LynageMemory, type LynageModel, type LynageConfig } from "@lynage/core";
+import { LynageMemory, type LynageModel, type LynageConfig, type Embedder } from "@lynage/core";
 import { createDatabase, ensureTables } from "./connection.js";
 import { SqliteStore } from "./store.js";
 
@@ -17,6 +17,11 @@ export interface CreateLynageMemoryOptions {
   dbPath?: string;
   /** Optional config overrides */
   config?: Partial<LynageConfig>;
+  /** Semantic search embedder (Phase 2). Defaults to FTS-only. */
+  embedder?: Embedder;
+  /** Embed messages at archive time (message-level index). Default true;
+   *  disable for bulk ingestion / benchmarks to avoid CPU embedding cost. */
+  enableMessageEmbedding?: boolean;
 }
 
 /**
@@ -30,8 +35,8 @@ export interface CreateLynageMemoryOptions {
  *
  * Add a model to enable AI-powered archiving and search:
  * ```ts
- * import { AiSdkModel } from "@lynage/ai-sdk";
- * const memory = createLynageMemory({ model: new AiSdkModel(yourLLM) });
+ * import { LynageSdkModel } from "@lynage/ai-sdk";
+ * const memory = createLynageMemory({ model: new LynageSdkModel(yourLLM) });
  * ```
  */
 export function createLynageMemory(options: CreateLynageMemoryOptions = {}): LynageMemory {
@@ -45,5 +50,7 @@ export function createLynageMemory(options: CreateLynageMemoryOptions = {}): Lyn
     store,
     model: options.model ?? ({} as LynageModel),
     config: options.config,
+    embedder: options.embedder,
+    enableMessageEmbedding: options.enableMessageEmbedding,
   });
 }

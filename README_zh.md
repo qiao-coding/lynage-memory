@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org/)
 
-**让 AI 不会忘记你们聊过什么。对话再长，始终能找到当时的原文 — 不丢信息、不编造、不烧 token。**
+**让 AI 不会忘记你们聊过什么。对话再长，始终能找到当时的原文 — 不丢信息、不靠摘要瞎猜、上下文大小始终保持固定。**
 
 [English](README.md) · [快速开始](#-quick-start) · [基准测试](#-benchmark-results) · [架构](docs/02-how-it-works.md) · [API](#-api-reference)
 
