@@ -32,8 +32,6 @@ class MockStore implements LynageStore {
   }
   async getMessagesAround() { return []; }
   async getMessageCount() { return this.messages.length; }
-  async saveMessageEmbeddings() {}
-  async getMessageEmbeddings() { return []; }
   async createChunk(input: { sessionId: string; summary: string; progress: string; keywords: string[]; sourceFromId: string; sourceToId: string; timeRangeStart: number; timeRangeEnd: number }) {
     const chunk: ContextChunk = { id: `chunk-${this.chunks.size}`, ...input, directoryId: undefined, createdAt: Date.now() };
     this.chunks.set(chunk.id, chunk); return chunk;

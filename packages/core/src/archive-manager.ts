@@ -14,8 +14,6 @@
 import type { Message } from "./types.js";
 import type { LynageStore } from "./store.js";
 import type { LynageModel, DirectorySummary, ChunkSummary } from "./model.js";
-import type { Embedder } from "./embedder.js";
-import { NoopEmbedder } from "./embedder.js";
 import { findNaturalBoundary } from "./boundary-detector.js";
 import { estimateMessagesTokenCount, estimateTokenCount } from "./token-counter.js";
 import { GenerationCompactor } from "./generation-compactor.js";
@@ -44,8 +42,6 @@ export class ArchiveManager {
   private store: LynageStore;
   private model: LynageModel;
   private config: ArchiveConfig;
-  private embedder: Embedder;
-  private enableMessageEmbedding: boolean;
   private compactor: GenerationCompactor;
   /** Per-session archiving state — at most one running task per session */
   private sessionBusy = new Set<string>();
@@ -56,12 +52,10 @@ export class ArchiveManager {
   /** Full directory re-summarization frequency (every K archive passes) */
   private static readonly DIR_SUMMARY_EVERY = 5;
 
-  constructor(store: LynageStore, model: LynageModel, config: ArchiveConfig, embedder?: Embedder, enableMessageEmbedding = true) {
+  constructor(store: LynageStore, model: LynageModel, config: ArchiveConfig) {
     this.store = store;
     this.model = model;
     this.config = config;
-    this.embedder = embedder ?? new NoopEmbedder();
-    this.enableMessageEmbedding = enableMessageEmbedding;
     this.compactor = new GenerationCompactor(store, model, config.directoryCapacity);
   }
 
@@ -162,21 +156,6 @@ export class ArchiveManager {
       summaries.push(...results);
     }
 
-    // 7b. Message-level embeddings — one pass over the archived messages so
-    // search can score each message individually (beats pooled chunk vectors
-    // for proper-noun answers buried in multi-topic windows). Non-fatal: a
-    // transient embedder error must never kill the archive. Can be disabled
-    // for bulk ingestion / benchmarks where the cheaper chunk-level fallback
-    // is fine (embedding every message on CPU is expensive at scale).
-    if (this.enableMessageEmbedding && !(this.embedder instanceof NoopEmbedder) && toArchive.length > 0) {
-      try {
-        const vectors = await this.embedder.embedBatch(toArchive.map((m) => m.content));
-        await this.store.saveMessageEmbeddings(
-          toArchive.map((m, i) => ({ messageId: m.id, sessionId, vector: vectors[i]! })),
-        );
-      } catch { /* embedding is best-effort */ }
-    }
-
     // 8. Create Context Chunks (one per batch)
     const chunks = [];
     for (let i = 0; i < batches.length; i++) {
@@ -208,8 +187,8 @@ export class ArchiveManager {
         generation: 0,
         timeRangeStart: toArchive[0]!.createdAt,
         timeRangeEnd: toArchive[toArchive.length - 1]!.createdAt,
-        overallContent: "活跃会话上下文（Active session context chunks）.",
-        progress: "会话进行中（Session in progress）.",
+        overallContent: "Active session context chunks.",
+        progress: "Session in progress.",
         mainConclusions: [],
         importantChanges: [],
       });
@@ -292,7 +271,7 @@ export class ArchiveManager {
         goals: [...new Set([...g0Dir.goals ?? [], ...newGoals])].slice(0, 20),
       };
       if (newKeywords.length > 0) {
-        dirSummary.overallContent += " [最近: " + newKeywords.slice(0, 8).join(", ") + "]";
+        dirSummary.overallContent += " [recent: " + newKeywords.slice(0, 8).join(", ") + "]";
       }
     }
     await this.store.updateDirectory(g0Dir.id, {

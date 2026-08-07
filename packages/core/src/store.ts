@@ -79,10 +79,6 @@ export interface LynageStore {
   getMessagesAround(messageId: string, window?: number): Promise<Message[]>;
   getMessageCount(sessionId: string): Promise<number>;
 
-  // message embeddings (message-level semantic index, written at archive time)
-  saveMessageEmbeddings(rows: { messageId: string; sessionId: string; vector: Float32Array }[]): Promise<void>;
-  getMessageEmbeddings(sessionId: string): Promise<{ messageId: string; vector: Float32Array; createdAt: number }[]>;
-
   // context chunks
   createChunk(input: CreateChunkInput): Promise<ContextChunk>;
   getChunk(id: string): Promise<ContextChunk | null>;

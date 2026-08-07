@@ -38,8 +38,6 @@ class MockStore implements LynageStore {
   async getMessageRange() { return []; }
   async getMessagesAround() { return []; }
   async getMessageCount() { return 0; }
-  async saveMessageEmbeddings() {}
-  async getMessageEmbeddings() { return []; }
   async createChunk() { return {} as ContextChunk; }
   async getChunk() { return null; }
   async getChunksByIds() { return []; }

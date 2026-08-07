@@ -130,7 +130,3 @@ export type {
   WorkerResult,
   ParallelSearchResult,
 } from "./parallel-search-coordinator.js";
-
-// Embedding (Phase 2)
-export type { Embedder } from "./embedder.js";
-export { TransformersEmbedder, NoopEmbedder, TrigramEmbedder, cosineSimilarity } from "./embedder.js";

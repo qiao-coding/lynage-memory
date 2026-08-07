@@ -3,7 +3,7 @@
 // Single source of truth — all data lives in SQLite tables.
 // ---------------------------------------------------------------------------
 
-import { sqliteTable, text, integer, blob } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
@@ -20,19 +20,6 @@ export const messages = sqliteTable("messages", {
   toolName: text("tool_name"),
   tokenCount: integer("token_count"),
   createdAt: integer("created_at").notNull(),
-});
-
-// ---------------------------------------------------------------------------
-// message_embeddings — precomputed per-message vectors (message-level semantic
-// index). Written at archive time; read at search time so retrieval embeds the
-// query once and scores messages individually instead of pooled chunk vectors.
-// ---------------------------------------------------------------------------
-
-export const messageEmbeddings = sqliteTable("message_embeddings", {
-  messageId: text("message_id").primaryKey(),
-  sessionId: text("session_id").notNull(),
-  vector: blob("vector", { mode: "buffer" }).notNull(),
-  dim: integer("dim").notNull(),
 });
 
 // ---------------------------------------------------------------------------

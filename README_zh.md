@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org/)
 
-**可靠的 AI Agent 对话记忆基础设施 — 消息不可变、树导航、高保真召回，固定 LLM 成本。**
+**让 AI 不会忘记你们聊过什么。对话再长，始终能找到当时的原文 — 不丢信息、不编造、不烧 token。**
 
 [English](README.md) · [快速开始](#-quick-start) · [基准测试](#-benchmark-results) · [架构](docs/02-how-it-works.md) · [API](#-api-reference)
 
@@ -64,7 +64,7 @@ Lynage 对 Agent 记忆采取了根本不同的思路。不把旧对话压缩成
 
 ### Galgame 剧情保真率（recall\@prompt）
 
-为叙事记忆设计（对齐 Protocol Zero）：具体剧情细节有多少能进入给生成器的上下文。合成 5 章中文 Galgame（205 轮），12 个细节埋在前 4 章（写第 5 章需回忆过去），`bge-small-zh` 嵌入（`benchmarks/galgame/recall-bench.ts`）。
+为叙事记忆设计：具体剧情细节有多少能进入给生成器的上下文。合成 5 章中文 Galgame（205 轮），12 个细节埋在前 4 章（写第 5 章需回忆过去），`bge-small-zh` 嵌入（`benchmarks/galgame/recall-bench.ts`）。
 
 | 上下文           | recall\@prompt |
 | ------------- | -------------- |
@@ -266,7 +266,7 @@ pnpm typecheck     # 7 包全部通过
 
 失忆式提问和 10,000 轮基准使用**嵌入事实点的合成对话**。事实关键词直接出现在消息中，降低了所有系统的检索难度。这些测试验证受控条件下 Lynage 的 Token 效率和检索鲁棒性（对比 Flat FTS 基线）。
 
-Galgame 剧情保真率评测（`benchmarks/galgame/recall-bench.ts`）测量**剧情细节保真**：具体台词、时间线事件、伏笔、角色记忆有多少比例能进入给生成器的上下文 —— 这是叙事记忆真正该测的指标（对齐 Protocol Zero 设计）。
+Galgame 剧情保真率评测（`benchmarks/galgame/recall-bench.ts`）测量**剧情细节保真**：具体台词、时间线事件、伏笔、角色记忆有多少比例能进入给生成器的上下文 —— 这是叙事记忆真正该测的指标。
 
 ### 已知局限
 
