@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org/)
 
-**可靠的 AI Agent 对话记忆基础设施 — 消息不可变、树导航、高保真召回，固定 LLM 成本。**
+**突破上下文窗口限制，让 Agent 的对话可以无限进行下去。聊过的每一个字都存着，随时能找到，上下文成本不随对话长度增长。**
 
 [English](README.md) · [快速开始](#-快速开始) · [基准测试](#-基准测试结果) · [架构](docs/02-how-it-works.md) · [API](#-api-参考)
 

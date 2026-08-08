@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org/)
 
-**Reliable conversation memory for AI agents — immutable storage, tree navigation, high-fidelity recall at fixed LLM cost.**
+**Break through the context window limit. Your agent's conversations can go on forever — every word is stored, always findable, and context costs never grow with conversation length.**
 
 [中文](README_zh.md) · [Quick Start](#-quick-start) · [Benchmarks](#-benchmark-results) · [Architecture](docs/02-how-it-works.md) · [API](#-api-reference)
 
