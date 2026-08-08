@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org/)
 
-**Lynage 的能力是让 Agent 的对话可以无限进行下去。并保存所有对话原文的记忆，保持历史上下文之间的关联性，而且上下文成本并不随对话长度增长，始终保持恒定。**
+**Lynage 的能力是让 Agent 的对话可以无限进行下去。所有对话不仅拥有原文的记忆，还保持历史上下文之间的关联性，而且上下文成本并不随对话长度增长，始终保持相对固定。**
 
 [English](README.md) · [快速开始](#-快速开始) · [基准测试](#-基准测试结果) · [架构](docs/02-how-it-works.md) · [API](#-api-参考)
 
@@ -274,17 +274,6 @@ Galgame 剧情保真率评测（`benchmarks/galgame/recall-bench.ts`）测量**�
 - **Sharp 依赖** — Transformers.js（bge-small-en）在某些平台可能需要 `sharp`；不可用时回退 `TrigramEmbedder`（纯 TypeScript，仅词汇匹配）。
 
 ***
-
-## 📄 引用
-
-```bibtex
-@software{lynage_memory,
-  author = {qiao-coding},
-  title = {Lynage Memory: 面向 AI Agent 的长对话记忆系统},
-  year = {2026},
-  url = {https://github.com/qiao-coding/lynage-memory},
-}
-```
 
 ## 许可证
 

@@ -273,17 +273,6 @@ The Galgame recall@prompt benchmark (`benchmarks/galgame/recall-bench.ts`) measu
 
 ---
 
-## 📄 Citation
-
-```bibtex
-@software{lynage_memory,
-  author = {qiao-coding},
-  title = {Lynage Memory: Long-Term Memory for AI Agents},
-  year = {2026},
-  url = {https://github.com/qiao-coding/lynage-memory},
-}
-```
-
 ## License
 
 MIT
