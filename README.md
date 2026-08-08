@@ -5,15 +5,13 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org/)
 
-**Break through the context window limit. Your agent's conversations can go on forever — every word is stored, always findable, and context costs never grow with conversation length.**
+**Lynage enables agents to carry on conversations indefinitely. Every exchange is preserved in full, with historical context kept interconnected, while context costs stay relatively fixed regardless of conversation length.**
 
 [中文](README_zh.md) · [Quick Start](#-quick-start) · [Benchmarks](#-benchmark-results) · [Architecture](docs/02-how-it-works.md) · [API](#-api-reference)
 
 ---
 
 ## 🧠 Overview
-
-Lynage is a **memory infrastructure layer, not a reasoning layer**. It guarantees what an agent needs from memory: original text is never lost, it can be navigated by a self-growing tree, and specific content is recalled on demand.
 
 Lynage takes a fundamentally different approach to agent memory. Instead of compressing old conversations into summaries (and losing information forever), or stuffing everything into context windows (and paying linear token costs), Lynage builds a **self-growing tree of indexed conversation chunks**.
 
@@ -62,9 +60,9 @@ Lynage takes a fundamentally different approach to agent memory. Instead of comp
 
 > Flat FTS gets **0%** because `search_messages` trigram FTS cannot parse vague natural-language questions — filler words break the match, returning zero results. Lynage's `extractKeywords` strips fillers and keeps the topic term, finds the decision chunk, and narrates the full process (tried A → abandoned → chose C). This is the **retrieval robustness** advantage — on a 2,000-turn session with 4,000 messages, Lynage recovers the decision 9/10 while flat recovers nothing.
 
-### Galgame Recall@Prompt (Narrative Fidelity)
+### Recall@Prompt (Narrative Fidelity)
 
-Designed for narrative memory (Protocol Zero): how often specific plot details survive into the context handed to a story generator. Synthetic 5-chapter Chinese Galgame (205 turns), 12 details planted in chapters 1-4 (writing ch.5 requires recalling the past), `bge-small-zh` embedding (`benchmarks/galgame/recall-bench.ts`).
+Designed for narrative memory: how often specific plot details survive into the context handed to a story generator. Synthetic 5-chapter Chinese Galgame (205 turns), 12 details planted in chapters 1-4 (writing ch.5 requires recalling the past), `bge-small-zh` embedding (`benchmarks/galgame/recall-bench.ts`).
 
 | Context | Recall@prompt |
 |---|---|
