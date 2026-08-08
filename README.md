@@ -50,7 +50,7 @@ Lynage takes a fundamentally different approach to agent memory. Instead of comp
 
 ### 10,000-Turn Stress Test (DeepSeek V4 Flash, validated at 2,000 turns)
 
-50 facts embedded across 2,000 turns. Reproducible in-repo: Lynage answers from tree summaries (`benchmarks/baseline/bench-10k.ts`); Flat FTS is a message-level keyword baseline via `search_messages` top-5 (`bench-flat.ts`).
+50 facts embedded across 2,000 turns. Reproducible in-repo: Lynage answers from tree summaries (`benchmarks/baseline/bench-10k.ts`); Flat FTS is a message-level keyword baseline — bare SQLite FTS5 search without any tree structure, AI summaries, or layered retrieval — via `search_messages` top-5 (`bench-flat.ts`).
 
 **Forget-style benchmark** — decision process buried in noise ("what did we pick? didn't we try something else first?"):
 
