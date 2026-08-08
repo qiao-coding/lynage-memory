@@ -5,9 +5,9 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org/)
 
-**Lynage 是 AI Agent 的长期记忆库：对话原文存 SQLite，自动建摘要索引，搜索时打开原文验证。不压缩，不丢弃。**
+**突破上下文窗口限制——Agent 和你的对话可以永远聊下去，不会因为聊得久就忘记前面说过的话。**
 
-**对话越长，传统方案只有两条路：要么全塞进上下文（token 越来越贵），要么压缩成摘要（信息永远丢失）。Lynage 给了第三条路。**
+**存下每一句原文，自动建索引，搜到直接打开原文验证。不靠摘要猜，不怕信息丢，上下文成本不随对话增长。**
 
 [English](README.md) · [快速开始](#-快速开始) · [为什么选 Lynage](#-为什么选-lynage) · [搜索架构](#-搜索架构) · [API](#-api-参考)
 
