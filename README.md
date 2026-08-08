@@ -5,6 +5,8 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org/)
 
+**Lynage is a long-term memory store for AI agents: original messages in SQLite, auto-indexed summaries for search, open-source verification on recall. No compression, no data loss.**
+
 **The longer the conversation, the harder the trade-off: stuff everything into context (tokens grow linearly), or compress into summaries (information is lost forever). Lynage is the third option.**
 
 [中文](README_zh.md) · [Quick Start](#-quick-start) · [Benchmarks](#-benchmark-results) · [Architecture](docs/02-how-it-works.md) · [API](#-api-reference)
