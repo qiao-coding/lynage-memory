@@ -20,11 +20,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@lynage/core": "workspace:*",
-    "@lynage/storage-sqlite": "workspace:*",
     "@lynage/ai-sdk": "workspace:*",
+    "@lynage/core": "workspace:*",
     "@lynage/mcp": "workspace:*",
-    "tsx": "^4.19.0"
+    "@lynage/storage-sqlite": "workspace:*",
+    "tsx": "^4.23.1"
   },
-  "files": ["src", "README.md", "LICENSE"]
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ]
 }
