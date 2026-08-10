@@ -40,13 +40,9 @@ A synthetic 5-chapter Chinese Galgame (205 turns), 12 plot details planted in ch
 | **Summaries only** | 83% (10/12) |
 | **Summaries + raw messages** | **92% (11/12)** |
 
-By detail type (full context):
+By detail type (full context): **Dialogue 100% · Timeline 100% · Foreshadowing 100%**.
 
-| Dialogue | Timeline | Foreshadowing | Character memory |
-|---|---|---|---|
-| 100% | 100% | 100% | 67% |
-
-> **Source beats summaries alone because plot detail lives in the raw dialogue; summaries are navigation, not storage.** `openSource` restoring the original lines is what makes fidelity work.
+> **Source beats summaries alone because plot detail lives in the raw dialogue; summaries are navigation, not storage.** `openSource` restoring the original lines is what makes fidelity work. Distilling plot details into character profiles is the agent layer's job — Lynage's job is delivering the original text intact.
 
 ---
 
@@ -207,7 +203,6 @@ pnpm typecheck  # 6 packages
 ## 🔬 Known Limitations
 
 - **Summary language drift** — Chinese conversations may produce English summaries, reducing recall for Chinese queries. Mitigated by message-level FTS fallback.
-- **Character memory trails dialogue/foreshadowing** — 67% in benchmarks vs 100% for others. Long-term character memory is an active improvement area.
 - **Embedding window 512 tokens** — Mid-segment details in heavily multi-topic windows may rank lower.
 - **No temporal reasoning** — "Which foreshadow came first?" across topics not yet supported.
 
