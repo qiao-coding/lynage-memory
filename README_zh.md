@@ -5,112 +5,88 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org/)
 
-**Lynage 的能力是让 Agent 的对话可以无限进行下去。所有对话不仅拥有原文的记忆，还保持历史上下文之间的关联性，而且上下文成本并不随对话长度增长，始终保持相对固定。**
+**Lynage 是给会讲故事的 AI Agent 用的剧情记忆工具。写小说、做 Galgame、跑长线互动剧情时，它让 Agent 记得住每一处剧情细节——谁说过什么、埋了什么伏笔、时间线走到哪了。剧情再长，细节不丢，上下文成本不涨。**
 
-[English](README.md) · [快速开始](#-快速开始) · [基准测试](#-基准测试结果) · [架构](docs/02-how-it-works.md) · [API](#-api-参考)
+[English](README.md) · [快速开始](#-快速开始) · [剧情保真率](#-剧情保真率) · [怎么做到的](#-怎么做到的) · [API](#-api-参考)
 
-***
+---
 
-## 🧠 概述
+## 🎭 为什么剧情 Agent 需要 Lynage
 
-Lynage 对 Agent 记忆采取了根本不同的思路。不把旧对话压缩成摘要（信息永久丢失），也不把所有内容塞进上下文窗口（Token 成本线性增长），而是构建一棵**自生长的对话分块索引树**。
+写长故事的 Agent 有一个绕不开的难题：**剧情需要前后一致，但记忆会断层。**
+
+写第 5 章时，要记得第 1 章的台词、第 2 章埋的伏笔、第 3 章定下的时间线。一旦记错，就是——角色名前后不一致、伏笔收不回来、时间线对不上。读者立刻出戏。
+
+传统记忆方案在这里都会失败：
+
+| 方案 | 剧情场景下的问题 |
+|---|---|
+| **全塞进上下文** | 剧情越长，token 越贵；总有一天塞不下，只能截断，早期剧情被扔 |
+| **压缩成摘要** | 细节活在原文对白里，摘要把"那晚的月亮"压成"场景描写"，伏笔和细节永久丢失 |
+| **向量记忆** | 存得下，但检索是"找相似"——剧情细节是精确的事实，不是相似语义 |
+
+**Lynage 给的第三条路：原文一字不差地存，按剧情片段建索引，写新章节时把相关原文捞回来。** 细节永远在，成本不随剧情长度增长。
+
+---
+
+## 📖 剧情保真率（核心指标）
+
+衡量一个剧情记忆工具是否合格，只有一个标准：**写新章节时，过去埋下的剧情细节有多少能进到生成器的上下文里。**
+
+合成 5 章中文 Galgame（205 轮），12 个剧情细节埋在前 4 章（第 5 章必须回忆前文才能写），用 `bge-small-zh` 嵌入（`benchmarks/galgame/recall-bench.ts`）：
+
+| 上下文 | 剧情保真率 |
+|---|---|
+| **仅摘要** | 83%（10/12） |
+| **摘要 + 原始消息** | **92%（11/12）** |
+
+按细节类型（摘要 + 原文）：
+
+| 台词 | 时间线 | 伏笔 | 角色记忆 |
+|---|---|---|---|
+| 100% | 100% | 100% | 67% |
+
+> **摘要 + 原文 > 仅摘要，证明剧情细节活在原始对白里，摘要只是导航不是存储。** Lynage 的 `openSource` 把原文捞回来，是保真的关键。
+
+---
+
+## 🧠 怎么做到的
+
+Lynage 不压缩、不截断，而是构建一棵**自生长的剧情分块索引树**：
 
 ```
                      ┌──────────────────────────┐
-                     │     G2: 全局压缩目录        │
-                     │  "Project Alpha: 技术选型   │
-                     │   历经3次重大方向调整..."    │
+                     │     G2: 全局概览          │
+                     │  "Project Alpha: 技术选型  │
+                     │   历经3次重大方向调整..."   │
                      └──────────┬───────────────┘
                                 │
               ┌─────────────────┼─────────────────┐
               │                 │                 │
      ┌────────▼────────┐ ┌──────▼──────┐ ┌───────▼───────┐
-     │  G1: 部署决策     │ │ G1: 数据库   │ │ G1: 认证方案   │
-     │  Docker→Vercel  │ │ PG→Mongo    │ │ NextAuth→     │
-     │  原因: 无运维     │ │ 非结构化文档  │ │ Supabase      │
+     │  G1: 章节A       │ │ G1: 章节B   │ │ G1: 角色线C   │
+     │  开场·伏笔1      │ │ 冲突·伏笔2  │ │ 关系变化       │
      └────────┬────────┘ └──────┬──────┘ └───────┬───────┘
               │                 │                 │
      ┌────────▼────────┐        ...               ...
-     │ G0 chunks (12个) │
-     │ 含原始消息指针    │
+     │ G0 剧情片段 (12)  │
+     │ 含原文消息指针    │
      └─────────────────┘
 ```
 
 **三个设计原则：**
 
-1. **消息不可变** — 每条消息追加写入 SQLite，无 UPDATE、无 DELETE。原文永远可恢复。
-2. **分块是导航索引，不是压缩** — AI 为每个对话片段生成结构化元数据（摘要、结论、目标、关键词）。摘要引导搜索；`source_from_id → source_to_id` 指针打开原文验证。
-3. **树自动生长** — 分块超容量自动建目录，目录超容量自动升代（G0→G1→G2→...）。分支因子 B=20，10,000 个分块仅 3 层深度。
+1. **剧情原文不可变** — 每一句对白追加写入 SQLite，永不修改、永不删除。原文永远可恢复。
+2. **分块是导航索引，不是压缩** — AI 为每个剧情片段生成结构化元数据（摘要、结论、目标、关键词），比如"伏笔：窗外那棵树"。摘要引导搜索；指针打开原文验证。
+3. **树自动生长** — 片段超容量自动建目录，目录超容量自动升代（G0→G1→G2→...）。剧情多长都不会失控。
 
-***
+---
 
-## 📊 基准测试结果
-
-### 10,000 轮压力测试（DeepSeek V4 Flash，2,000 轮验证）
-
-50 个事实点嵌入 2,000 轮对话，抽样 10 道失忆式提问。**本仓可复现**：Lynage 用树摘要作答（`benchmarks/baseline/bench-10k.ts`）；Flat FTS 基线（裸 SQLite FTS5 关键词搜索，不加任何树结构/AI 摘要/分层检索）用 `search_messages` top-5（`bench-flat.ts`）。
-
-**失忆式提问基准**（决策过程埋在噪声里："怎么定的？是不是先试了别的？最后选哪个？"）：
-
-| 指标   | Lynage         | Flat FTS（基线） |
-| ---- | -------------- | ------------ |
-| 准确率  | **90%** (9/10) | 0% (0/10)    |
-| 幻觉率  | 0              | 0            |
-| 回答质量 | 完整叙述决策过程       | "历史中完全没有提到"  |
-
-> Flat FTS 得 **0%**，因为 `search_messages` 的 trigram FTS 解析不了含糊自然语言问句（"记不太清了…是不是…怎么定的"）—— 填充词破坏了匹配，返回 0 条。Lynage 的 `extractKeywords` 剥离填充词保留主题词，找到决策 chunk，完整叙述"试 A → 弃 → 选 C"过程。在 2,000 轮 / 4,000 消息的会话里，Lynage 9/10 找回决策，Flat 一无所获。这是**检索鲁棒性**优势，不是模型质量差异。
-
-### 剧情保真率（recall\@prompt）
-
-为叙事记忆设计：具体剧情细节有多少能进入给生成器的上下文。合成 5 章中文 Galgame（205 轮），12 个细节埋在前 4 章（写第 5 章需回忆过去），`bge-small-zh` 嵌入（`benchmarks/galgame/recall-bench.ts`）。
-
-| 上下文           | recall\@prompt |
-| ------------- | -------------- |
-| **仅摘要**       | 83%（10/12）     |
-| **摘要 + 原始消息** | **92%**（11/12） |
-
-> **摘要 + 原文高于仅摘要，说明剧情细节活在原始对白里，摘要是导航不是存储** —— Lynage 的 `openSource` 恢复原文是保真的关键。
-
-### Lynage 的差异化
-
-大多数记忆系统回答的问题是"怎么检索更准？" — 向量嵌入、图谱、更好的重排。Lynage 回答了一个它们都不回答的问题：**对话永不结束时，上下文预算怎么办？**
-
-| <br />    | 向量记忆（Mem0/Zep/MemGPT） | Lynage                            |
-| --------- | --------------------- | --------------------------------- |
-| 存储        | 平面索引增长；上下文线性膨胀        | **自生长分块索引树**                      |
-| 10,000 轮后 | 上下文窗口膨胀或截断 → 丢早期事实    | 树压缩到 \~3 层；**上下文恒定 \~800 tokens** |
-| 上下文成本     | 每轮都在涨                 | **固定，无论对话多长**                     |
-| 信息保留      | 截断 = 永久丢失             | 消息不可变；**永不丢失**                    |
-| 搜索        | 线性扫描或平面向量搜索           | **对数深度树导航**（log₂₀ N）              |
-
-**树就是差异化。** 每条消息不可变（追加写、永不删除）。AI 把窗口摘要成 chunk，chunk 压缩成目录，目录压缩成世代（G0→G1→G2）。搜索只下钻相关分支 — O(log₂₀ N)，不是 O(N)。LLM 永远不看到全部历史，只看到工作记忆 + 相关 chunk 摘要 + 验证后的原文片段。
-
-这就是为什么 10,000 轮压力测试才是真正的对比：**Lynage 保持 100% 准确率，成本是平面的 1/4.7，Token 是 1/8** — 而平面系统必须在"花更多钱"和"遗忘"之间二选一。
-
-***
-
-## 🛠️ 环境配置
-
-### 安装
+## 🚀 快速开始
 
 ```bash
 pnpm add lynage-memory
 ```
-
-### 环境变量
-
-```bash
-# AI 归档和搜索必需
-export DEEPSEEK_API_KEY="sk-..."
-
-# 可选：其他模型厂商
-export OPENAI_API_KEY="sk-..."
-export ANTHROPIC_API_KEY="sk-..."
-```
-
-***
-
-## 🚀 快速开始
 
 ```ts
 import { createLynageMemory } from "lynage-memory";
@@ -118,17 +94,17 @@ import { createLynageMemory } from "lynage-memory";
 // 一行初始化 — SQLite 自动创建
 const memory = createLynageMemory();
 
-// Agent 循环中使用
+// 剧情生成 Agent 的每一轮
 const turn = await memory.startTurn(threadId, userId, userInput);
 const reply = await yourLLM.generate(turn.messages);
 await turn.finish({ response: reply });
 
-// 搜索对话历史
-const result = await memory.search({ query: "数据库方案", sessionId: threadId });
+// 写新章节前，捞回相关剧情
+const result = await memory.search({ query: "伏笔 窗外那棵树", sessionId: threadId });
 const messages = await memory.openSource(result.candidates[0].contextId);
 ```
 
-**接入 AI 归档（推荐 500 轮以上对话）：**
+**开启 AI 归档（推荐 500 轮以上）：**
 
 ```ts
 import { LynageSdkModel } from "@lynage/ai-sdk";
@@ -138,72 +114,51 @@ const model = createOpenAI({ apiKey: process.env.DEEPSEEK_API_KEY })("deepseek-v
 const memory = createLynageMemory({ model: new LynageSdkModel(model) });
 ```
 
-**接入语义嵌入（推荐）：**
+**开启语义嵌入：**
 
 ```ts
 import { TransformersEmbedder } from "@lynage/core";
 
 const memory = createLynageMemory({
   model: new LynageSdkModel(model),
-  embedder: new TransformersEmbedder(),   // bge-small-en，384 维，本地免费
+  embedder: new TransformersEmbedder(),   // bge-small-en/zh，本地免费
 });
 ```
 
-> `TrigramEmbedder` 是零依赖回退方案（\~0.5ms，稀疏 trigram TF-IDF）。它能桥接轻微词汇差距，但**不是语义嵌入** —— 专有名词答案（"Summer Vibes"）需要 `TransformersEmbedder`（bge-small-en），它无需字符重叠即可语义匹配。
-
-***
+---
 
 ## 🔍 搜索架构
 
-Lynage 使用**分层检索** — 每层增加能力，逐层回退：
+分层检索 — 大部分查询零 LLM 成本，逐层回退：
 
 ```
 用户查询
   │
-  ├─ L0: 目录 FTS (~1ms, 零 LLM)
-  │   "最近在做什么?" → 目录摘要匹配
-  │   命中率 ~30%, 成本 ¥0
-  │
-  ├─ L1: 分块 FTS + 消息 FTS (~6ms, 零 LLM)
-  │   "TypeScript方案" → trigram 关键词匹配
-  │   命中率 ~50%, 成本 ¥0
-  │
-  ├─ L2: 语义嵌入 (~0.5ms trigram / ~30ms bge, 零 LLM)
-  │   "部署平台" ≈ "deployment strategy" → 余弦相似度
-  │   命中率 ~85%（合并）, 成本 ¥0
-  │
-  └─ L3: LLM 重排 + 目录导航 (~1-5s, 1 次 LLM 调用)
-      "为什么放弃 Docker 选 Vercel？" → 语义相关性
-      命中率 ~95%, 成本 ~¥0.01
+  ├─ L0: 目录 FTS (~1ms, 零 LLM)   "当前主线到哪了?" → 命中 ~30%
+  ├─ L1: 分块 FTS + 消息 FTS (~6ms, 零 LLM)   "窗外那棵树" → 命中 ~50%
+  ├─ L2: 语义嵌入 (~30ms, 零 LLM)  "那段夜谈" ≈ "雨夜对话" → 命中 ~85%
+  └─ L3: LLM 重排 (~1-5s)         "谁在开头立下了那个约定?" → 命中 ~95%
 ```
 
-**L0-L2 是零 LLM 成本的快速路径。** 大部分查询在 L1-L2 解决。L3 仅用于真正模糊、需要语义理解的查询。
+大部分查询在 L1-L2 解决。L3 仅用于真正模糊的查询。
 
-***
+---
 
 ## 📜 API 参考
 
-| 方法                                                  | 说明                        |
-| --------------------------------------------------- | ------------------------- |
-| `memory.startTurn(sessionId, userId, input)`        | 保存用户消息，返回编译上下文（工作记忆 + 历史） |
-| `turn.finish({ response, toolCalls, toolResults })` | 保存助手回复，自动触发归档             |
-| `memory.search({ query, sessionId })`               | 分层搜索（L0→L3），返回排序候选        |
-| `memory.openSource(contextId)`                      | 打开分块读取原始消息 + 父目录上下文       |
-| `memory.commit(actions, sessionId, userId?)`        | 增量写回工作记忆 / 用户记忆           |
-| `memory.getWorkingMemory(sessionId)`                | 读取当前任务状态（任务/进度/未解决）       |
-| `memory.getUserMemory(userId)`                      | 读取跨会话用户偏好                 |
-| `memory.getDirectoryTree(sessionId)`                | 查看生成树结构                   |
+| 方法 | 说明 |
+|---|---|
+| `memory.startTurn(sessionId, userId, input)` | 保存用户消息，返回编译上下文 |
+| `turn.finish({ response })` | 保存助手回复，自动触发归档 |
+| `memory.search({ query, sessionId })` | 分层搜索，返回排序候选 |
+| `memory.openSource(contextId)` | 打开剧情片段，读取原始消息 |
+| `memory.commit(actions, sessionId, userId?)` | 写回工作记忆 |
+| `memory.getDirectoryTree(sessionId)` | 查看剧情索引树结构 |
 
-### MCP Server / Claude Code 集成
-
-一行命令接入：
+### MCP Server / Claude Code
 
 ```bash
-# Stdio 模式（Claude Code 默认）
 npx lynage-memory mcp --db ./lynage.db --provider deepseek --model deepseek-v4-flash
-
-# HTTP 模式（远程客户端 / 浏览器）
-npx lynage-memory serve --db ./lynage.db --port 4318
 ```
 
 Claude Code 配置（`.claude/settings.json`）：
@@ -219,61 +174,44 @@ Claude Code 配置（`.claude/settings.json`）：
 }
 ```
 
-配置后自动获得 6 个记忆工具：`lynage_memory_read` / `search` / `open_source` / `commit` / `read_user` / `stats`。
+配置后获得 6 个记忆工具：`lynage_memory_read` / `search` / `open_source` / `commit` / `read_user` / `stats`。
 
-### 跑基准测试
+### 跑剧情保真率基准
 
 ```bash
-# 10k 压力测试 + forget 基准（Lynage vs Flat FTS 基线）
-cd benchmarks/baseline
-TURNS=2000 pnpm tsx bench-10k.ts          # Lynage fair
-TURNS=2000 pnpm tsx bench-flat.ts         # Flat FTS 基线
-TURNS=2000 pnpm tsx bench-forget.ts       # Lynage forget（噪声鲁棒）
-TURNS=2000 pnpm tsx bench-flat-forget.ts  # Flat FTS forget 基线
-
-# Galgame 剧情保真率（recall@prompt）
 cd benchmarks/galgame && pnpm tsx recall-bench.ts
 ```
 
 ### 跑测试
 
 ```bash
-pnpm test          # 56 单元测试
-pnpm typecheck     # 6 包全部通过
+pnpm test       # 56 单元测试
+pnpm typecheck  # 6 包全部通过
 ```
 
-***
+---
 
 ## 📁 仓库结构
 
-| 目录                         | 内容                                     |
-| -------------------------- | -------------------------------------- |
-| `packages/core/`           | 核心逻辑 — 记忆、搜索、归档、升代、验证、编译（13 模块）        |
+| 目录 | 内容 |
+|---|---|
+| `packages/core/` | 核心逻辑 — 记忆、搜索、归档、升代、验证 |
 | `packages/storage-sqlite/` | SQLite + FTS5 — 7 张表、WAL 模式、trigram 索引 |
-| `packages/adapter-ai-sdk/` | Vercel AI SDK 适配 — 5 个 Agent 工具        |
-| `packages/mcp-server/`     | MCP Server — 6 个工具，跨框架                 |
-| `apps/test-runner/`        | E2E 测试管线（DeepSeek V4 Flash）            |
-| `benchmarks/`              | Galgame 剧情保真率、LoCoMo、失忆/10k 基准         |
-| `docs/`                    | 架构深入、概念指南                              |
+| `packages/adapter-ai-sdk/` | Vercel AI SDK 适配 |
+| `packages/mcp-server/` | MCP Server，跨框架 |
+| `benchmarks/` | Galgame 剧情保真率、LoCoMo、失忆/10k 基准 |
+| `docs/` | 架构深入、概念指南 |
 
-***
+---
 
-## 🔬 方法论与局限
+## 🔬 已知局限
 
-### 测试数据
+- **AI 摘要语言漂移** — 中文对话可能生成英文摘要，降低中文查询召回。消息级 FTS 兜底。
+- **角色记忆弱于台词/伏笔** — 基准中角色记忆 67%，低于其他类型的 100%。角色长期记忆是持续改进方向。
+- **嵌入窗口 512 token** — 重度多主题片段中部细节排名可能偏低。
+- **时序推理** — "哪个伏笔先埋的？"这类跨主题时间比较尚不支持。
 
-失忆式提问和 10,000 轮基准使用**嵌入事实点的合成对话**。事实关键词直接出现在消息中，降低了所有系统的检索难度。这些测试验证受控条件下 Lynage 的 Token 效率和检索鲁棒性（对比 Flat FTS 基线）。
-
-Galgame 剧情保真率评测（`benchmarks/galgame/recall-bench.ts`）测量**剧情细节保真**：具体台词、时间线事件、伏笔、角色记忆有多少比例能进入给生成器的上下文 —— 这是叙事记忆真正该测的指标（对齐 Protocol Zero 设计）。
-
-### 已知局限
-
-- **AI 摘要语言漂移** — 中文对话可能生成英文摘要，降低中文查询的 FTS 召回率。通过消息级 FTS 回退缓解。
-- **时序推理** — 跨主题比较（"先决定哪个？"）需要 Phase 3 树原生时序查询支持。
-- **嵌入上下文窗口** — bge-small-en 上下文 512 token，chunk 的嵌入由摘要 + 消息头尾构成。答案埋在重度多主题窗口中间时排名可能偏低；缩小 chunk（降低 `retainTokens`）可缓解。
-- **Sharp 依赖** — Transformers.js（bge-small-en）在某些平台可能需要 `sharp`；不可用时回退 `TrigramEmbedder`（纯 TypeScript，仅词汇匹配）。
-
-***
+---
 
 ## 许可证
 
