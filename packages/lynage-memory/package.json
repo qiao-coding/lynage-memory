@@ -1,6 +1,7 @@
 {
-  "name": "@lynage/mcp",
+  "name": "lynage-memory",
   "version": "0.0.1",
+  "description": "Long-term story memory for AI agents — novels, Galgame, interactive fiction. Store every word, recall plot detail on demand, fixed context cost.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -11,8 +12,7 @@
     ".": {
       "import": "./src/index.ts",
       "types": "./src/index.ts"
-    },
-    "./cli": "./src/cli.ts"
+    }
   },
   "scripts": {
     "build": "tsdown src/index.ts --format cjs,esm --dts",
@@ -23,21 +23,8 @@
     "@lynage/core": "workspace:*",
     "@lynage/storage-sqlite": "workspace:*",
     "@lynage/ai-sdk": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.12.0",
-    "ai": "^4.3.0",
-    "zod": "^3.24.0",
+    "@lynage/mcp": "workspace:*",
     "tsx": "^4.19.0"
   },
-  "devDependencies": {},
-  "optionalDependencies": {
-    "@ai-sdk/openai": "^1.0.0",
-    "@ai-sdk/deepseek": "^0.2.0",
-    "@ai-sdk/anthropic": "^1.0.0"
-  },
-  "files": [
-    "src",
-    "README.md",
-    "LICENSE",
-    "!src/**/*.test.ts"
-  ]
+  "files": ["src", "README.md", "LICENSE"]
 }
