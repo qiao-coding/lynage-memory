@@ -26,7 +26,7 @@ async function main(){
   const store=mem.store;
   const queries=["样式方案","数据库","Button","Table"];
   for(const q of queries){
-    let t0=performance.now();
+    const t0=performance.now();
     const cids=await store.searchChunks(q,"s1");
     const t1=performance.now();
     const msgs=await store.searchMessages(q,"s1");

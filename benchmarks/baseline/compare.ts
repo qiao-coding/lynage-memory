@@ -41,7 +41,7 @@ function simulateLynage(turns: Array<{ user: string; assistant: string }>): Turn
     allMessages.push({ role: "assistant", content: turn.assistant, turn: i });
 
     // Compute recent context (messages + chunk summaries)
-    let totalChars = 0;
+    const totalChars = 0;
     const recentStart = findRecentStart(allMessages, THRESHOLD);
 
     // Archive older messages into chunks

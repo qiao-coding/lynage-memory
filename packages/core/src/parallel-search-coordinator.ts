@@ -12,7 +12,6 @@
 // ---------------------------------------------------------------------------
 
 import type { LynageStore } from "./store.js";
-import type { Message, DirectoryNode, ContextChunk } from "./types.js";
 import type { HistoryRetriever, SearchCandidate, DirectoryContext } from "./history-retriever.js";
 import { SourceVerifier, type VerifiedCandidate } from "./source-verifier.js";
 

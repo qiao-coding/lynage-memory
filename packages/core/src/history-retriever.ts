@@ -167,7 +167,6 @@ export class HistoryRetriever {
         const refinedIds = await this.store.searchChunks(secondFts, sessionId);
         // Intersection: chunks that match BOTH keywords
         const refinedSet = new Set(refinedIds);
-        const before = matchedChunkIds.size;
         matchedChunkIds = new Set([...matchedChunkIds].filter(id => refinedSet.has(id)));
         // If intersection empties the set, keep the original (better recall than nothing)
         if (matchedChunkIds.size === 0) {

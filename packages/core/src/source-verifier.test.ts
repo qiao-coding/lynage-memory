@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { SourceVerifier, type VerifiedCandidate } from "./source-verifier.js";
+import { SourceVerifier } from "./source-verifier.js";
 import type { LynageStore, Message, ContextChunk, SearchCandidate } from "./index.js";
 
 // ---- Minimal mock store ----

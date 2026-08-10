@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 
 import { createOpenAI } from "@ai-sdk/openai";
-import { streamText, type CoreTool } from "ai";
+import { streamText } from "ai";
 import { createDatabase, ensureTables, SqliteStore } from "@lynage/storage-sqlite";
 import { LynageSdkModel } from "@lynage/ai-sdk";
 import { LynageMemory } from "@lynage/core";

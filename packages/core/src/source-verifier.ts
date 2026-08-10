@@ -11,7 +11,7 @@
 // ---------------------------------------------------------------------------
 
 import type { LynageStore } from "./store.js";
-import type { Message, DirectoryNode } from "./types.js";
+import type { Message } from "./types.js";
 import type { SearchCandidate } from "./history-retriever.js";
 
 // ---- Types ----

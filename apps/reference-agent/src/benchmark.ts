@@ -5,8 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { createOpenAI } from "@ai-sdk/openai";
-import { runAgent, type RunAgentResult } from "./agent.js";
-import { createDatabase, SqliteStore } from "@lynage/storage-sqlite";
+import { runAgent } from "./agent.js";
 import path from "node:path";
 import fs from "node:fs";
 

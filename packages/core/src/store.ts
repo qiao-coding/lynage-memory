@@ -12,7 +12,6 @@ import type {
   WorkingMemory,
   UserMemory,
   SearchTask,
-  SourceRange,
 } from "./types.js";
 
 // ---- input types for creation ----

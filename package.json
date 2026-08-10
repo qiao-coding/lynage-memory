@@ -8,6 +8,8 @@
     "dev": "pnpm -r dev",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint": "eslint packages/ apps/ benchmarks/",
+    "lint:fix": "eslint packages/ apps/ benchmarks/ --fix",
     "typecheck": "pnpm -r typecheck",
     "clean": "pnpm -r exec rm -rf dist node_modules"
   },
@@ -18,8 +20,10 @@
     ]
   },
   "devDependencies": {
+    "eslint": "^10.8.1",
     "tsdown": "^0.22.14",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.66.0",
     "unrun": "^0.3.1",
     "vitest": "^4.1.10"
   },

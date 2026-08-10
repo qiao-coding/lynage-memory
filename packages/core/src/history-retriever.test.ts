@@ -79,7 +79,7 @@ class MockStoreForSearch implements LynageStore {
   async removeChildFromDirectory() {}
   async getDirectoryChildren(dirId: string) {
     const kids = this.children.get(dirId) ?? [];
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+     
     return kids.map((k, i) => ({
       id: `dc-${i}`,
       directoryId: dirId,

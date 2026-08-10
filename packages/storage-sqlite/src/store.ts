@@ -2,7 +2,7 @@
 // SqliteStore — LynageStore implementation backed by SQLite + Drizzle ORM
 // ---------------------------------------------------------------------------
 
-import { eq, and, gte, lte, gt, desc, asc, count, isNull, inArray } from "drizzle-orm";
+import { eq, and, gt, desc, asc, count, isNull, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 /** Monotonic timestamp — Date.now() collisions at high insert rates orphan

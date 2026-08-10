@@ -8,7 +8,6 @@ import type { LynageModel } from "./model.js";
 import type { LynageConfig, MessageInput } from "./types.js";
 import { DEFAULT_CONFIG } from "./types.js";
 import type { Embedder } from "./embedder.js";
-import { NoopEmbedder } from "./embedder.js";
 import { TurnManager, type TurnHandle } from "./turn.js";
 import { ArchiveManager, type ArchiveResult } from "./archive-manager.js";
 import { HistoryRetriever, type SearchParams, type SearchResult, type DirectoryTreeNode, type SearchCandidate, type OpenSourceResult } from "./history-retriever.js";

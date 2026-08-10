@@ -107,7 +107,7 @@ for(let i=0;i<questions.length;i++){const q=questions[i]!;
   const s0=performance.now();const sr=await mem.search({query:q.q,sessionId:"s1"});ts+=performance.now()-s0;
   searchedDirs+=sr.searchedDirectories;checkedChunks+=sr.totalChunksChecked;
   if(sr.totalChunksChecked>0)treeHits++;
-  let msgs:any[]=[];
+  const msgs:any[]=[];
   for(let ci=0;ci<Math.min(sr.candidates.length,4);ci++){const or=await mem.openSource(sr.candidates[ci]!.contextId);if(or)msgs.push(...or.messages);}
   const cx=msgs.map((x:any)=>`[${x.role}] ${x.content}`).join("\n");
   const l0=performance.now();const an=await ask(`根据对话历史回答，用中文。如果历史中没有明确提到，诚实说不知道，不要猜。\n---\n${cx}\n---\n${q.q}`);tl+=performance.now()-l0;

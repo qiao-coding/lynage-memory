@@ -145,7 +145,7 @@ describe("ArchiveManager", () => {
       await store.appendMessage({ sessionId: "s1", role: i % 2 === 0 ? "user" : "assistant", content: "Long enough message content to exceed the archiving threshold." });
     }
 
-    const result = await archiveManager.checkAndArchive("s1");
+    await archiveManager.checkAndArchive("s1");
     const dir = (await store.getRootDirectories("s1"))[0]!;
     const children = await store.getDirectoryChildren(dir.id);
     expect(children.length).toBeGreaterThan(0);
