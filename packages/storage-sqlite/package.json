@@ -26,5 +26,11 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
     "drizzle-kit": "^0.30.0"
-  }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "!src/**/*.test.ts"
+  ]
 }

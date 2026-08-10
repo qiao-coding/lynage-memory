@@ -32,5 +32,11 @@
     "@ai-sdk/openai": "^1.0.0",
     "@ai-sdk/deepseek": "^0.2.0",
     "@ai-sdk/anthropic": "^1.0.0"
-  }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "!src/**/*.test.ts"
+  ]
 }

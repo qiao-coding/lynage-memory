@@ -19,5 +19,11 @@
     "@huggingface/transformers": "^4.2.0",
     "onnxruntime-node": "^1.27.0",
     "zod": "^3.24.0"
-  }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "!src/**/*.test.ts"
+  ]
 }
