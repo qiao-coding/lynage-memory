@@ -2,20 +2,21 @@
   "name": "@lynage/mcp",
   "version": "0.0.1",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.cjs",
+  "types": "./dist/index.d.mts",
   "bin": {
-    "lynage-memory": "./src/cli.ts"
+    "lynage-memory": "./dist/cli.mjs"
   },
   "exports": {
     ".": {
-      "import": "./src/index.ts",
-      "types": "./src/index.ts"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
     },
-    "./cli": "./src/cli.ts"
+    "./cli": "./dist/cli.mjs"
   },
   "scripts": {
-    "build": "tsdown src/index.ts --format cjs,esm --dts",
+    "build": "tsdown src/index.ts src/cli.ts --format cjs,esm --dts --minify --no-sourcemap",
     "dev": "tsx --watch src/index.ts",
     "typecheck": "tsc --noEmit"
   },
@@ -35,9 +36,8 @@
     "@ai-sdk/anthropic": "^1.0.0"
   },
   "files": [
-    "src",
+    "dist",
     "README.md",
-    "LICENSE",
-    "!src/**/*.test.ts"
+    "LICENSE"
   ]
 }

@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 // ---------------------------------------------------------------------------
 // lynage-memory CLI — delegates to @lynage/mcp's CLI
 //

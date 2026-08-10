@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 // ---------------------------------------------------------------------------
 // CLI entry point for @lynage/mcp
 //

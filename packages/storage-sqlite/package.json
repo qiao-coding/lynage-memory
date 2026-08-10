@@ -2,16 +2,17 @@
   "name": "@lynage/storage-sqlite",
   "version": "0.0.1",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.cjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "import": "./src/index.ts",
-      "types": "./src/index.ts"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
     }
   },
   "scripts": {
-    "build": "tsdown src/index.ts --format cjs,esm --dts",
+    "build": "tsdown src/index.ts --format cjs,esm --dts --minify --no-sourcemap",
     "dev": "tsx --watch src/index.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
@@ -28,9 +29,8 @@
     "drizzle-kit": "^0.30.0"
   },
   "files": [
-    "src",
+    "dist",
     "README.md",
-    "LICENSE",
-    "!src/**/*.test.ts"
+    "LICENSE"
   ]
 }
